@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("config", type=Path)
     prepare.add_argument("--force", action="store_true")
 
-    run = subparsers.add_parser("run", help="run generation, quality, and selection")
+    run = subparsers.add_parser("run", help="run generation, verification, and judging")
     run.add_argument("config", type=Path)
     run.add_argument("--force-prepare", action="store_true")
 

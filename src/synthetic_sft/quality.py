@@ -20,10 +20,24 @@ _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
 
 def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
-    """Split Qwen-style thinking while preserving malformed output for auditing."""
+    """Read polished JSON or split Qwen-style thinking, preserving malformed output."""
     if not raw:
         return None, None, False
     text = raw.strip()
+    if "<reasoning>" in text and "</reasoning>" in text and "<response>" in text:
+        reasoning = text.split("<reasoning>", 1)[1].split("</reasoning>", 1)[0].strip()
+        response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
+        return reasoning or None, response or None, bool(reasoning and response)
+    json_text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
+        polished = json.loads(json_text)
+        if isinstance(polished, dict):
+            reasoning = polished.get("reasoning")
+            response = polished.get("response")
+            if isinstance(reasoning, str) and reasoning.strip() and isinstance(response, str):
+                return reasoning.strip(), response.strip() or None, True
+    except (TypeError, ValueError):
+        pass
     if "<think>" in text:
         _, _, after_start = text.partition("<think>")
         if "</think>" not in after_start:
@@ -102,14 +116,42 @@ class ParseAndVerify:
 
 def judge_prompt(row: Mapping[str, Any], rubric_version: int) -> str:
     reasoning = row.get("reasoning") or "(no separate reasoning trace)"
-    return f"""Evaluate this proposed SFT answer. Return exactly one JSON object and no prose.
+    reference = _reference_answer(row.get("verification_json"))
+    return f"""You are a strict SFT data editor. Evaluate the reasoning trace and final response
+independently. Return exactly one JSON object and no prose.
 
 Rubric version: {rubric_version}
-Each score must be a number from 0.0 to 1.0.
-- correctness: likely factual/logical correctness relative to the user request
-- clarity: clear, direct, readable final response
-- pedagogy: useful explanation appropriate for supervised fine-tuning
-- reasoning_consistency: reasoning supports and does not contradict the final response
+Use only integer scores 1 through 5. A score measures the editing required before this text is
+safe and useful as training data, not its length or confidence.
+Keep each feedback string concrete and no longer than 30 words.
+
+5 — TRAINING-READY: correct, rigorous, direct, self-contained, and needs no edit. Every material
+    reasoning step is justified; there is no self-talk, answer-format chatter, backtracking,
+    repetition, or needless restatement. The final response follows the requested format exactly.
+4 — LIGHT EDIT: fully correct and reliable, with one minor clarity, style, or harmless redundancy
+    issue. A small edit makes it training-ready.
+3 — SUBSTANTIVE LOCAL EDIT: the core approach/conclusion is mostly correct, but there is a
+    meaningful gap, imprecision, distracting meta-commentary, repeated recomputation, or local
+    reasoning defect. It needs a focused rewrite, not just copyediting.
+2 — MAJOR REWRITE: some useful progress, but a serious logical gap, contradiction, unsupported
+    conclusion, or wrong result means most of the component must be rewritten.
+1 — UNUSABLE: absent when required, mostly wrong, incoherent, irrelevant, fabricated, or not
+    recoverable without replacement.
+
+Calibration examples:
+- Direct necessary steps followed by one useful check: reasoning 5.
+- Correct clean derivation with one harmless repeated sentence: reasoning 4.
+- Correct answer reached through repeated self-talk/recomputation or an unexplained key leap:
+  reasoning 3, even though the answer is correct.
+- Correct answer apparently reached by invalid reasoning: reasoning 2.
+- Wrong or unrelated work: reasoning 1.
+- Exact requested short answer with no extra material: response 5; concise is not a defect.
+- Correct answer with a small presentational blemish: response 4.
+- Mostly correct answer needing a meaningful localized correction: response 3.
+- Wrong result with some relevant content: response 2; wholly unusable response: response 1.
+
+Inspect the reasoning step by step and identify the earliest material defect. Treat a supplied
+reference as authoritative evidence, but do not copy source metadata into feedback.
 
 User request:
 {row.get("user_prompt", "")}
@@ -120,9 +162,34 @@ Reasoning trace:
 Final response:
 {row.get("response", "")}
 
+Reference material:
+{reference}
+
 Required JSON shape:
-{{"correctness":0.0,"clarity":0.0,"pedagogy":0.0,"reasoning_consistency":0.0}}
+{{"reasoning":{{"score":1,"issues":["meta_commentary"],
+"feedback":"brief concrete reason"}},"response":{{"score":1,
+"issues":["incorrect"],"feedback":"brief concrete reason"}}}}
+
+Allowed reasoning issues: absent, incomplete, factual_or_logical_error, unsupported_step,
+missing_critical_step, contradiction, meandering, repetition, meta_commentary, poor_structure,
+unverifiable.
+Allowed response issues: incorrect, incomplete, instruction_violation, format_violation,
+irrelevant, unclear, oververbose, unsupported_claim, meta_commentary. Use an empty list when there
+is no issue.
 """
+
+
+def _reference_answer(raw: Any) -> str:
+    if not raw:
+        return "(no reference answer is available)"
+    try:
+        payload = json.loads(str(raw))
+        answer = payload.get("entry", {}).get("answer")
+        if answer is None:
+            return "(the source provides a verifier but no textual reference answer)"
+        return json.dumps(answer, ensure_ascii=False)
+    except (TypeError, ValueError, AttributeError):
+        return "(reference metadata could not be decoded; rely on the problem itself)"
 
 
 def parse_judge_scores(raw: str | None) -> tuple[JudgeScores | None, str | None]:
@@ -161,7 +228,7 @@ class FinalizeQuality:
                 model=judge_config.model_source or self.config.model.model_source,
                 rubric_version=judge_config.rubric_version,
                 scores=scores,
-                aggregate=scores.mean() if scores is not None else None,
+                aggregate=scores.effective() if scores is not None else None,
                 error=error,
             )
             row["judge_status"] = "passed" if error is None else "error"
@@ -175,7 +242,7 @@ class FinalizeQuality:
             finish_reason=row.get("finish_reason"),
             generation_complete=bool(row.get("generation_complete")),
         )
-        raw_aggregate = aggregate_quality(verifier.score, judge.aggregate, quality.verifier_weight)
+        raw_aggregate = judge.aggregate
         zero_reasons = []
         if not validity.generation_complete:
             zero_reasons.append("generation_incomplete")
@@ -186,7 +253,7 @@ class FinalizeQuality:
                 zero_reasons.append("verifier_failed")
         if judge.enabled and (judge.error is not None or judge.aggregate is None):
             zero_reasons.append("judge_error")
-        aggregate = 0.0 if zero_reasons else raw_aggregate
+        aggregate = 0 if zero_reasons else raw_aggregate
         details = QualityDetails(
             aggregate_score=aggregate,
             decision=QualityDecision(
@@ -201,13 +268,3 @@ class FinalizeQuality:
         row["quality_score"] = aggregate
         row["quality_details_json"] = details.as_json()
         return row
-
-
-def aggregate_quality(
-    verifier_score: float | None, judge_score: float | None, verifier_weight: float
-) -> float | None:
-    if verifier_score is not None and judge_score is not None:
-        return verifier_weight * verifier_score + (1.0 - verifier_weight) * judge_score
-    if verifier_score is not None:
-        return verifier_score
-    return judge_score

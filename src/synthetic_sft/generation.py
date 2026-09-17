@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pandas as pd
@@ -10,8 +11,8 @@ from synthetic_sft.quality import judge_prompt
 
 
 class FanOutCandidates:
-    def __init__(self, candidates_per_prompt: int, run_seed: int, model: str) -> None:
-        self.candidates_per_prompt = candidates_per_prompt
+    def __init__(self, rollouts_per_prompt: int, run_seed: int, model: str) -> None:
+        self.rollouts_per_prompt = rollouts_per_prompt
         self.run_seed = run_seed
         self.model = model
 
@@ -23,7 +24,7 @@ class FanOutCandidates:
                 "candidate_id": stable_id(row["sample_id"], self.run_seed, index),
                 "model": self.model,
             }
-            for index in range(self.candidates_per_prompt)
+            for index in range(self.rollouts_per_prompt)
         ]
 
 
@@ -67,7 +68,7 @@ class VLLMBatchPredictor:
             return frame
         records = frame.to_dict(orient="records")
         messages = [self._messages(row) for row in records]
-        sampling = [self._sampling(row) for row in records]
+        sampling = [self._sampling(row, phase="judge" if self.judge else "draft") for row in records]
         template_kwargs = (
             {"enable_thinking": False}
             if self.judge
@@ -76,6 +77,21 @@ class VLLMBatchPredictor:
                 "reasoning_effort": self.config.model.sampling.reasoning_effort,
             }
         )
+        results = self._chat(records, messages, sampling, template_kwargs)
+        for row, output in results:
+            candidate = output.outputs[0]
+            if self.judge:
+                row["judge_raw_output"] = candidate.text
+            else:
+                row["draft_generation"] = candidate.text
+                row["draft_finish_reason"] = candidate.finish_reason
+                row["draft_num_input_tokens"] = len(output.prompt_token_ids or [])
+                row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
+        if not self.judge:
+            self._polish(records)
+        return pd.DataFrame.from_records(records)
+
+    def _chat(self, records, messages, sampling, template_kwargs):
         try:
             outputs = self.llm.chat(
                 messages,
@@ -83,7 +99,7 @@ class VLLMBatchPredictor:
                 use_tqdm=False,
                 chat_template_kwargs=template_kwargs,
             )
-            results = list(zip(records, outputs, strict=True))
+            return list(zip(records, outputs, strict=True))
         except Exception as batch_error:
             results = []
             for row, row_messages, row_sampling in zip(records, messages, sampling, strict=True):
@@ -96,21 +112,29 @@ class VLLMBatchPredictor:
                     )[0]
                     results.append((row, output))
                 except Exception as exc:
-                    error_prefix = "judge_generation" if self.judge else "generation"
-                    row[f"{error_prefix}_error"] = f"{type(exc).__name__}: {exc}"
-                    row[f"batch_{error_prefix}_error"] = (
-                        f"{type(batch_error).__name__}: {batch_error}"
-                    )
+                    prefix = "judge_generation" if self.judge else "generation"
+                    row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
+                    row[f"batch_{prefix}_error"] = f"{type(batch_error).__name__}: {batch_error}"
+            return results
+
+    def _polish(self, records: list[dict[str, Any]]) -> None:
+        ready = [row for row in records if row.get("draft_generation")]
+        if not self.config.generation.polish:
+            for row in ready:
+                row["raw_generation"] = row["draft_generation"]
+                row["finish_reason"] = row["draft_finish_reason"]
+                row["num_input_tokens"] = row["draft_num_input_tokens"]
+                row["num_generated_tokens"] = row["draft_num_generated_tokens"]
+            return
+        messages = [self._polish_messages(row) for row in ready]
+        sampling = [self._sampling(row, phase="polish") for row in ready]
+        results = self._chat(ready, messages, sampling, {"enable_thinking": False})
         for row, output in results:
             candidate = output.outputs[0]
-            if self.judge:
-                row["judge_raw_output"] = candidate.text
-            else:
-                row["raw_generation"] = candidate.text
-                row["finish_reason"] = candidate.finish_reason
-                row["num_input_tokens"] = len(output.prompt_token_ids or [])
-                row["num_generated_tokens"] = len(candidate.token_ids or [])
-        return pd.DataFrame.from_records(records)
+            row["raw_generation"] = candidate.text
+            row["finish_reason"] = candidate.finish_reason
+            row["num_input_tokens"] = len(output.prompt_token_ids or [])
+            row["num_generated_tokens"] = len(candidate.token_ids or [])
 
     def _messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
         if self.judge:
@@ -126,18 +150,66 @@ class VLLMBatchPredictor:
         messages.append({"role": "user", "content": str(row["user_prompt"])})
         return messages
 
-    def _sampling(self, row: dict[str, Any]):
-        if self.judge:
+    def _polish_messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
+        reference = _reference_answer(row.get("verification_json"))
+        prompt = f"""Rewrite scratch work into expert-quality supervised fine-tuning data.
+
+Solve and check the problem yourself. Use the scratch work only when it is sound; discard it when
+it is long, confused, or contradictory. The trusted verification target may help detect an error,
+but the reasoning must independently establish the result. Never mention scratch work, editing,
+the prompt, a reference answer, a target, a checker, or formatting instructions. Remove self-talk,
+backtracking, repeated calculations, and failed attempts. Give a concise derivation with every
+necessary logical step and no unnecessary ones; do not narrate exhaustive search. The final
+response must obey the user's requested answer format exactly.
+
+Return exactly these two tagged sections with no text before or after them:
+<reasoning>
+clean derivation
+</reasoning>
+<response>
+final response
+</response>
+
+User request:
+{row.get("user_prompt", "")}
+
+Scratch work:
+{row.get("draft_generation", "")}
+
+Trusted verification target (never mention this in the output):
+{reference}
+"""
+        return [{"role": "user", "content": prompt}]
+
+    def _sampling(self, row: dict[str, Any], *, phase: str):
+        if phase == "judge":
             return self._sampling_type(
                 temperature=0.0,
                 max_tokens=self.config.quality.judge.max_tokens,
                 seed=_candidate_seed(str(row["candidate_id"]), suffix="judge"),
+            )
+        if phase == "polish":
+            return self._sampling_type(
+                temperature=0.0,
+                max_tokens=self.config.generation.polish_max_tokens,
+                seed=_candidate_seed(str(row["candidate_id"]), suffix="polish"),
             )
         params = self.config.model.sampling.model_dump(exclude={"reasoning_effort"})
         return self._sampling_type(
             **params,
             seed=_candidate_seed(str(row["candidate_id"]), suffix="generate"),
         )
+
+
+def _reference_answer(raw: Any) -> str:
+    if not raw:
+        return "(none)"
+    try:
+        payload = json.loads(str(raw))
+        answer = payload.get("entry", {}).get("answer")
+        return "(none)" if answer is None else json.dumps(answer, ensure_ascii=False)
+    except (TypeError, ValueError, AttributeError):
+        return "(unreadable)"
 
 
 def build_vllm_processor(config: PipelineConfig, *, judge: bool, concurrency: int):

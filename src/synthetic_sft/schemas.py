@@ -48,14 +48,51 @@ class VerifierDetails(StrictModel):
         return self
 
 
-class JudgeScores(StrictModel):
-    correctness: float = Field(ge=0.0, le=1.0)
-    clarity: float = Field(ge=0.0, le=1.0)
-    pedagogy: float = Field(ge=0.0, le=1.0)
-    reasoning_consistency: float = Field(ge=0.0, le=1.0)
+ReasoningIssue = Literal[
+    "absent",
+    "incomplete",
+    "factual_or_logical_error",
+    "unsupported_step",
+    "missing_critical_step",
+    "contradiction",
+    "meandering",
+    "repetition",
+    "meta_commentary",
+    "poor_structure",
+    "unverifiable",
+]
+ResponseIssue = Literal[
+    "incorrect",
+    "incomplete",
+    "instruction_violation",
+    "format_violation",
+    "irrelevant",
+    "unclear",
+    "oververbose",
+    "unsupported_claim",
+    "meta_commentary",
+]
 
-    def mean(self) -> float:
-        return sum(self.model_dump().values()) / 4.0
+
+class ReasoningAssessment(StrictModel):
+    score: int = Field(ge=1, le=5)
+    issues: list[ReasoningIssue] = Field(default_factory=list)
+    feedback: str = Field(min_length=1, max_length=2000)
+
+
+class ResponseAssessment(StrictModel):
+    score: int = Field(ge=1, le=5)
+    issues: list[ResponseIssue] = Field(default_factory=list)
+    feedback: str = Field(min_length=1, max_length=2000)
+
+
+class JudgeScores(StrictModel):
+    reasoning: ReasoningAssessment
+    response: ResponseAssessment
+
+    def effective(self) -> int:
+        """The weaker component determines training readiness."""
+        return min(self.reasoning.score, self.response.score)
 
 
 class JudgeDetails(StrictModel):
@@ -63,7 +100,7 @@ class JudgeDetails(StrictModel):
     model: str | None = None
     rubric_version: int | None = Field(default=None, ge=1)
     scores: JudgeScores | None = None
-    aggregate: float | None = Field(default=None, ge=0.0, le=1.0)
+    aggregate: int | None = Field(default=None, ge=1, le=5)
     error: str | None = None
 
     @model_validator(mode="after")
@@ -84,9 +121,9 @@ class JudgeDetails(StrictModel):
         if self.model is None or self.rubric_version is None:
             raise ValueError("enabled judge requires model and rubric_version")
         if self.scores is not None:
-            expected = self.scores.mean()
-            if self.aggregate is None or abs(self.aggregate - expected) > 1e-9:
-                raise ValueError("judge aggregate must equal the mean of rubric scores")
+            expected = self.scores.effective()
+            if self.aggregate != expected:
+                raise ValueError("judge aggregate must equal the weaker rubric score")
         elif self.aggregate is not None:
             raise ValueError("judge aggregate requires rubric scores")
         return self
@@ -108,7 +145,7 @@ QualityZeroReason = Literal[
 
 
 class QualityDecision(StrictModel):
-    raw_aggregate_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    raw_aggregate_score: int | None = Field(default=None, ge=1, le=5)
     zeroed: bool
     zero_reasons: list[QualityZeroReason] = Field(default_factory=list)
 
@@ -120,8 +157,8 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[2] = 2
-    aggregate_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    schema_version: Literal[3] = 3
+    aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
     verifier: VerifierDetails
     judge: JudgeDetails

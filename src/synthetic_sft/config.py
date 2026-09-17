@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from synthetic_sft.schemas import StrictModel
 
@@ -45,37 +45,29 @@ class ModelConfig(StrictModel):
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
 
 
+class GenerationConfig(StrictModel):
+    rollouts_per_prompt: int = Field(default=1, gt=0)
+    polish: bool = True
+    polish_max_tokens: int = Field(default=4096, gt=0)
+
+
 class JudgeConfig(StrictModel):
-    enabled: bool = False
+    enabled: bool = True
     model_source: str | None = None
     batch_size: int = Field(default=64, gt=0)
     max_tokens: int = Field(default=512, gt=0)
-    rubric_version: int = Field(default=1, ge=1)
+    rubric_version: int = Field(default=2, ge=1)
 
 
 class QualityConfig(StrictModel):
     verifier_threshold: float = Field(default=1.0, ge=0.0, le=1.0)
-    verifier_weight: float = Field(default=0.8, ge=0.0, le=1.0)
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
-
-
-class SelectionConfig(StrictModel):
-    candidates_per_prompt: int = Field(default=1, gt=0)
-    keep_per_prompt: int = Field(default=1, gt=0)
-    exact_deduplicate: bool = True
-
-    @model_validator(mode="after")
-    def keep_does_not_exceed_candidates(self) -> SelectionConfig:
-        if self.keep_per_prompt > self.candidates_per_prompt:
-            raise ValueError("keep_per_prompt cannot exceed candidates_per_prompt")
-        return self
 
 
 class OutputConfig(StrictModel):
     parquet_target_mb: int = Field(default=384, ge=64)
     compression: str = "zstd"
     prepared_shards_per_gpu: int = Field(default=4, gt=0)
-    shuffle_partitions: int | None = Field(default=None, gt=0)
 
 
 class SlurmConfig(StrictModel):
@@ -95,8 +87,8 @@ class PipelineConfig(StrictModel):
     run: RunConfig
     source: SourceConfig
     model: ModelConfig = Field(default_factory=ModelConfig)
+    generation: GenerationConfig = Field(default_factory=GenerationConfig)
     quality: QualityConfig = Field(default_factory=QualityConfig)
-    selection: SelectionConfig = Field(default_factory=SelectionConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     slurm: SlurmConfig = Field(default_factory=SlurmConfig)
 

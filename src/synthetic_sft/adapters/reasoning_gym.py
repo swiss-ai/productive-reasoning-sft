@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Iterator, Mapping
 from typing import Any
 
@@ -14,6 +15,15 @@ class ReasoningGymAdapter(SourceAdapter):
     name = "reasoning_gym"
 
     def _task_specs(self) -> list[dict[str, Any]]:
+        if self.params.get("all_tasks"):
+            from reasoning_gym.factory import DATASETS
+
+            excluded = {"composite", *map(str, self.params.get("exclude_tasks", []))}
+            return [
+                {"name": name, "weight": 1.0, "config": {}}
+                for name in sorted(DATASETS)
+                if name not in excluded
+            ]
         tasks = self.params.get("tasks")
         if tasks is None:
             return [
@@ -56,6 +66,11 @@ class ReasoningGymAdapter(SourceAdapter):
         import reasoning_gym
 
         specs = self._task_specs()
+        if self.params.get("all_tasks") and num_samples != len(specs):
+            raise ValueError(
+                f"all_tasks requires num_samples={len(specs)} for exactly one example per task; "
+                f"got {num_samples}"
+            )
         counts = self._allocate(num_samples, specs)
         ordinal = 0
         for task_index, (spec, count) in enumerate(zip(specs, counts, strict=True)):
@@ -108,7 +123,47 @@ class ReasoningGymAdapter(SourceAdapter):
         try:
             verification = json.loads(str(payload))
             scorer = get_score_answer_fn(verification["source_dataset"])
-            score = float(scorer(response, verification["entry"]))
+            score = max(
+                float(scorer(candidate, verification["entry"]))
+                for candidate in _answer_candidates(response)
+            )
             return VerificationResult(score=min(1.0, max(0.0, score)))
         except Exception as exc:  # A broken source scorer must not lose the generated row.
             return VerificationResult(score=None, error=f"{type(exc).__name__}: {exc}")
+
+
+def _answer_candidates(response: str) -> list[str]:
+    """Offer source scorers plausible final-answer spans without knowing answer semantics."""
+    text = response.strip()
+    plain = re.sub(r"[*_`#$]", "", text)
+    plain = plain.replace(r"\(", "").replace(r"\)", "")
+    candidates = [text, plain]
+    candidates.extend(re.findall(r"\\boxed\{([^{}]+)\}", text))
+    candidates.extend(
+        f"{numerator}/{denominator}"
+        for numerator, denominator in re.findall(
+            r"\\d?frac\{([^{}]+)\}\{([^{}]+)\}", text
+        )
+    )
+    candidates.extend(
+        match.strip()
+        for match in re.findall(
+            r"(?im)(?:final\s+answer|answer)\s*(?:is|:)\s*([^\n]+)", plain
+        )
+    )
+    nonempty_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if nonempty_lines:
+        last = re.sub(r"[*_`#]", "", nonempty_lines[-1]).strip()
+        candidates.append(last)
+        if "=" in last:
+            candidates.append(last.rsplit("=", 1)[-1].strip().rstrip("."))
+        numbers = re.findall(r"[-+]?\d+(?:\.\d+)?(?:/\d+)?", last.replace(",", ""))
+        if numbers:
+            candidates.append(numbers[-1])
+            try:
+                numeric = float(numbers[-1])
+                if numeric.is_integer():
+                    candidates.append(str(int(numeric)))
+            except ValueError:
+                pass
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))

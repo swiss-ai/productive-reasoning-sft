@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import time
-from functools import partial
 from pathlib import Path
 
 import yaml
@@ -13,12 +12,21 @@ from synthetic_sft.generation import FanOutCandidates, build_vllm_processor
 from synthetic_sft.prepare import prepare_source
 from synthetic_sft.quality import FinalizeQuality, ParseAndVerify
 from synthetic_sft.schemas import quality_details_schema
-from synthetic_sft.selection import (
-    SELECTED_COLUMNS,
-    choose_duplicate,
-    content_hash,
-    rank_candidate_groups,
-)
+
+SFT_COLUMNS = [
+    "sample_id",
+    "candidate_id",
+    "candidate_index",
+    "system_prompt",
+    "user_prompt",
+    "reasoning",
+    "response",
+    "source",
+    "model",
+    "quality_score",
+    "quality_details_json",
+    "provenance_json",
+]
 
 
 def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path:
@@ -36,15 +44,13 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
         context = ray.data.DataContext.get_current()
         context.target_max_block_size = config.output.parquet_target_mb * 1024 * 1024
         replicas = available_gpu_replicas(config.model.tensor_parallel_size)
-        shuffle_partitions = config.output.shuffle_partitions or max(200, replicas * 8)
-
         generated_path = config.run_dir / "intermediate" / "generated"
         if not _stage_complete(config, "generated"):
             _rotate_incomplete(generated_path)
             dataset = ray.data.read_parquet(str(seeds))
             dataset = dataset.flat_map(
                 FanOutCandidates(
-                    config.selection.candidates_per_prompt,
+                    config.generation.rollouts_per_prompt,
                     config.run.seed,
                     config.model.model_source,
                 )
@@ -69,33 +75,16 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                     candidates
                 )
             candidates = candidates.map(FinalizeQuality(config.model_dump(mode="json")))
-            candidates = candidates.groupby(
-                "sample_id", num_partitions=shuffle_partitions
-            ).map_groups(
-                partial(
-                    rank_candidate_groups,
-                    keep_per_prompt=config.selection.keep_per_prompt,
-                ),
-                batch_format="pandas",
-            )
             candidates.write_parquet(str(candidates_path), compression=config.output.compression)
             _mark_stage(config, "candidates", candidates_path)
 
-        selected_path = config.run_dir / "selected"
-        if not _stage_complete(config, "selected"):
-            _rotate_incomplete(selected_path)
-            selected = ray.data.read_parquet(str(candidates_path)).filter(
-                lambda row: bool(row["selected"])
-            )
-            if config.selection.exact_deduplicate:
-                selected = selected.map(content_hash)
-                selected = selected.groupby(
-                    "content_hash", num_partitions=shuffle_partitions
-                ).map_groups(choose_duplicate, batch_format="pandas")
-            selected = selected.select_columns(SELECTED_COLUMNS)
-            selected.write_parquet(str(selected_path), compression=config.output.compression)
-            _mark_stage(config, "selected", selected_path)
-    return selected_path
+        sft_path = config.run_dir / "sft"
+        if not _stage_complete(config, "sft"):
+            _rotate_incomplete(sft_path)
+            sft = ray.data.read_parquet(str(candidates_path)).select_columns(SFT_COLUMNS)
+            sft.write_parquet(str(sft_path), compression=config.output.compression)
+            _mark_stage(config, "sft", sft_path)
+    return sft_path
 
 
 def _manifest_dir(config: PipelineConfig) -> Path:
