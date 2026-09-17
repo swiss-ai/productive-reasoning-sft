@@ -1,29 +1,21 @@
 run:
-  run_id: reasoning-gym-judged-smoke
+  run_id: reasoning-gym-all-tasks-quality-v4
   output_dir: ../runs
   seed: 42
   resume: true
 
 source:
   adapter: reasoning_gym
-  num_samples: 4
-  system_prompt: >-
-    Solve the problem carefully. Give a self-contained final answer after your reasoning.
+  num_samples: 105
+  system_prompt: null
   params:
-    tasks:
-      - name: leg_counting
-        weight: 1
-        config:
-          max_animals: 20
-      - name: chain_sum
-        weight: 1
-        config: {}
+    all_tasks: true
 
 model:
   model_source: Qwen/Qwen3.8-27B
   dtype: bfloat16
   tensor_parallel_size: 4
-  max_model_len: 4096
+  max_model_len: 16384
   gpu_memory_utilization: 0.90
   batch_size: 8
   trust_remote_code: false
@@ -31,31 +23,29 @@ model:
     temperature: 1.0
     top_p: 0.95
     top_k: 20
-    max_tokens: 1024
+    max_tokens: 4096
     presence_penalty: 0.0
     repetition_penalty: 1.0
     reasoning_effort: medium
 
+generation:
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 4096
+
 quality:
   verifier_threshold: 1.0
-  verifier_weight: 0.8
   judge:
     enabled: true
     model_source: null
-    batch_size: 8
-    max_tokens: 256
-    rubric_version: 1
-
-selection:
-  candidates_per_prompt: 2
-  keep_per_prompt: 1
-  exact_deduplicate: true
+    batch_size: 16
+    max_tokens: 768
+    rubric_version: 2
 
 output:
   parquet_target_mb: 64
   compression: zstd
   prepared_shards_per_gpu: 4
-  shuffle_partitions: null
 
 slurm:
   nodes: 1

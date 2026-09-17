@@ -1,14 +1,15 @@
 # synthetic-sft
 
-Generate and rank synthetic SFT data on one or many Slurm nodes.
+Generate and judge synthetic SFT data on one or many Slurm nodes.
 
 1. The configured source produces prompts and provenance.
-2. The model produces one or more rollouts per prompt, with reasoning and the final answer stored
-   separately.
-3. Known answers are verified when available, and the configured judge scores every rollout.
-   Incomplete or failed rollouts remain in the data with quality `0` and a structured reason.
-4. The best nonzero-scored rollouts per prompt are written to a clean SFT dataset. Every
-   rollout—including zero-score and unselected rows—remains available for analysis.
+2. The model solves each prompt, then rewrites its scratch work into clean reasoning and a final
+   answer; both are stored separately.
+3. Known answers are verified when available. A judge grades reasoning and the final response
+   separately from 1–5 using fixed, edit-readiness milestones; the lower grade is the quality
+   score. Failed generation or verification is marked `0` with a structured reason.
+4. Every rollout is written to the SFT dataset. Filtering is left to the downstream query, so an
+   unusually good or bad batch is never distorted by a fixed top-k rule.
 
 ## Run it
 
@@ -18,7 +19,7 @@ Edit `configs/reasoning-gym-smoke.yaml`, then submit one job:
 uv run synthetic-sft submit configs/reasoning-gym-smoke.yaml
 ```
 
-The YAML controls the source, model, number of rollouts, judging, selection, output location, and
+The YAML controls the source, model, number of rollouts, judging, output location, and
 Slurm resources. A single submission uses every requested node and GPU.
 
 To build the image first:
@@ -27,31 +28,23 @@ To build the image first:
 ./container/build.sh "$SCRATCH/images/synthetic-sft-v0.1.sqsh"
 ```
 
-For a quick local check that does not use GPUs:
-
-```bash
-uv sync --extra dev
-uv run pytest
-```
-
 ## Results
 
 Each run is written under `output_dir/run_id`:
 
-- `candidates/` contains every rollout, its quality score and details, errors, rank, and selection
-  decision.
-- `selected/` contains only the chosen SFT rows with stable training columns.
+- `candidates/` contains every rollout plus operational and verification details.
+- `sft/` contains every rollout with stable training columns, ready to query by quality.
 - `manifests/` records the exact run configuration and quality-details schema.
 
-Selected rows contain `sample_id`, `system_prompt`, `user_prompt`, `reasoning`, `response`,
+SFT rows contain `sample_id`, `candidate_id`, `system_prompt`, `user_prompt`, `reasoning`, `response`,
 `source`, `model`, `quality_score`, `quality_details_json`, and `provenance_json`.
 
 The Parquet datasets can be queried directly:
 
 ```sql
-SELECT selected, quality_score, count(*)
-FROM read_parquet('runs/reasoning-gym-judged-smoke/candidates/**/*.parquet')
-GROUP BY selected, quality_score;
+SELECT source, quality_score, count(*)
+FROM read_parquet('runs/reasoning-gym-all-tasks-quality-v4/sft/**/*.parquet')
+GROUP BY source, quality_score;
 ```
 
 ## Using another source
