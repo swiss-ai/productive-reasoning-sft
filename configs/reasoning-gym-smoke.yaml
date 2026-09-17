@@ -1,0 +1,70 @@
+run:
+  run_id: reasoning-gym-judged-smoke
+  output_dir: ../runs
+  seed: 42
+  resume: true
+
+source:
+  adapter: reasoning_gym
+  num_samples: 4
+  system_prompt: >-
+    Solve the problem carefully. Give a self-contained final answer after your reasoning.
+  params:
+    tasks:
+      - name: leg_counting
+        weight: 1
+        config:
+          max_animals: 20
+      - name: chain_sum
+        weight: 1
+        config: {}
+
+model:
+  model_source: Qwen/Qwen3.8-27B
+  dtype: bfloat16
+  tensor_parallel_size: 4
+  max_model_len: 4096
+  gpu_memory_utilization: 0.90
+  batch_size: 8
+  trust_remote_code: false
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 1024
+    presence_penalty: 0.0
+    repetition_penalty: 1.0
+    reasoning_effort: medium
+
+quality:
+  verifier_threshold: 1.0
+  verifier_weight: 0.8
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 8
+    max_tokens: 256
+    rubric_version: 1
+
+selection:
+  candidates_per_prompt: 2
+  keep_per_prompt: 1
+  exact_deduplicate: true
+
+output:
+  parquet_target_mb: 64
+  compression: zstd
+  prepared_shards_per_gpu: 4
+  shuffle_partitions: null
+
+slurm:
+  nodes: 1
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "01:30:00"
+  partition: debug
+  account: infra01
+  qos: null
+  exclusive: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.1.sqsh"

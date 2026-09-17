@@ -1,0 +1,20 @@
+ARG BASE_IMAGE=nvcr.io/nvidia/vllm:26.08-py3
+FROM ${BASE_IMAGE}
+
+WORKDIR /opt/synthetic-sft
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+
+ENV VIRTUAL_ENV=/opt/synthetic-sft/.venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+# Keep NVIDIA's vLLM, PyTorch, and CUDA packages visible while installing the
+# pipeline and its locked Python dependencies outside Debian's managed prefix.
+RUN uv venv --system-site-packages "${VIRTUAL_ENV}" \
+    && uv export --frozen --no-dev --extra production --no-emit-project --no-hashes \
+        --output-file /tmp/requirements.txt \
+    && uv pip install --python "${VIRTUAL_ENV}/bin/python" --no-cache \
+        --requirement /tmp/requirements.txt \
+    && uv pip install --python "${VIRTUAL_ENV}/bin/python" --no-cache --no-deps . \
+    && python -c "import ray, synthetic_sft, vllm" \
+    && rm /tmp/requirements.txt

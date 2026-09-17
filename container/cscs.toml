@@ -1,0 +1,10 @@
+image = "${SFT_IMAGE}"
+mounts = ["${SCRATCH}:${SCRATCH}", "${PROJECT}:${PROJECT}"]
+workdir = "${SFT_PROJECT_DIR}"
+
+[env]
+PYTHONPATH = "${SFT_PROJECT_DIR}/src:${PYTHONPATH:-}"
+HF_HOME = "${SCRATCH}/.cache/huggingface"
+RAY_TMPDIR = "/tmp/ray_${SLURM_JOB_ID}"
+TOKENIZERS_PARALLELISM = "true"
+RAY_USAGE_STATS_ENABLED = "0"

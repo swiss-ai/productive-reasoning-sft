@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synthetic-sft"
+version = "0.1.0"
+description = "A scalable, adapter-driven synthetic SFT data pipeline"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "pandas>=2.2.0",
+  "pyarrow>=19.0.0",
+  "pydantic>=2.11.0",
+  "PyYAML>=6.0.2",
+  "reasoning-gym>=0.1.25",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.11.0",
+]
+production = [
+  "ray[data]==2.58.0",
+]
+
+[project.scripts]
+synthetic-sft = "synthetic_sft.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/synthetic_sft"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
