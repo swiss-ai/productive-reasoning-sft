@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pandas as pd
 
 from synthetic_sft.config import PipelineConfig
 from synthetic_sft.json_utils import stable_id
-from synthetic_sft.quality import judge_prompt
+from synthetic_sft.quality import FinalizeQuality, ParseAndVerify, judge_prompt
 
 
 class FanOutCandidates:
@@ -42,6 +41,14 @@ class VLLMBatchPredictor:
         self._sampling_type = SamplingParams
         self.config = PipelineConfig.model_validate(config)
         self.judge = judge
+        self.fused_judge = not judge and can_fuse_judge(self.config)
+        if self.fused_judge:
+            self._parse_and_verify = ParseAndVerify(
+                self.config.source.adapter,
+                self.config.source.params,
+                self.config.quality.verifier_threshold,
+            )
+            self._finalize_quality = FinalizeQuality(config)
         model = self.config.model
         judge_config = self.config.quality.judge
         model_source = (
@@ -78,7 +85,8 @@ class VLLMBatchPredictor:
                 "reasoning_effort": self.config.model.sampling.reasoning_effort,
             }
         )
-        results = self._chat(records, messages, sampling, template_kwargs)
+        phase = "judge" if self.judge else "generation"
+        results = self._chat(records, messages, sampling, template_kwargs, phase=phase)
         for row, output in results:
             candidate = output.outputs[0]
             if self.judge:
@@ -90,9 +98,11 @@ class VLLMBatchPredictor:
                 row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
         if not self.judge:
             self._polish(records)
+            if self.fused_judge:
+                self._verify_and_judge(records)
         return pd.DataFrame.from_records(records)
 
-    def _chat(self, records, messages, sampling, template_kwargs):
+    def _chat(self, records, messages, sampling, template_kwargs, *, phase: str):
         try:
             outputs = self.llm.chat(
                 messages,
@@ -113,7 +123,7 @@ class VLLMBatchPredictor:
                     )[0]
                     results.append((row, output))
                 except Exception as exc:
-                    prefix = "judge_generation" if self.judge else "generation"
+                    prefix = "judge_generation" if phase == "judge" else "generation"
                     row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
                     row[f"batch_{prefix}_error"] = f"{type(batch_error).__name__}: {batch_error}"
             return results
@@ -129,13 +139,36 @@ class VLLMBatchPredictor:
             return
         messages = [self._polish_messages(row) for row in ready]
         sampling = [self._sampling(row, phase="polish") for row in ready]
-        results = self._chat(ready, messages, sampling, {"enable_thinking": False})
+        results = self._chat(
+            ready,
+            messages,
+            sampling,
+            {"enable_thinking": False},
+            phase="polish",
+        )
         for row, output in results:
             candidate = output.outputs[0]
             row["raw_generation"] = candidate.text
             row["finish_reason"] = candidate.finish_reason
             row["num_input_tokens"] = len(output.prompt_token_ids or [])
             row["num_generated_tokens"] = len(candidate.token_ids or [])
+
+    def _verify_and_judge(self, records: list[dict[str, Any]]) -> None:
+        for row in records:
+            self._parse_and_verify(row)
+        messages = [self._judge_messages(row) for row in records]
+        sampling = [self._sampling(row, phase="judge") for row in records]
+        results = self._chat(
+            records,
+            messages,
+            sampling,
+            {"enable_thinking": False},
+            phase="judge",
+        )
+        for row, output in results:
+            row["judge_raw_output"] = output.outputs[0].text
+        for row in records:
+            self._finalize_quality(row)
 
     def _messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
         if self.judge:
@@ -151,17 +184,27 @@ class VLLMBatchPredictor:
         messages.append({"role": "user", "content": str(row["user_prompt"])})
         return messages
 
+    def _judge_messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "user",
+                "content": judge_prompt(row, self.config.quality.judge.rubric_version),
+            }
+        ]
+
     def _polish_messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
-        reference = _reference_answer(row.get("verification_json"))
         prompt = f"""Rewrite scratch work into expert-quality supervised fine-tuning data.
 
 Solve and check the problem yourself. Use the scratch work only when it is sound; discard it when
-it is long, confused, or contradictory. The trusted verification target may help detect an error,
-but the reasoning must independently establish the result. Never mention scratch work, editing,
-the prompt, a reference answer, a target, a checker, or formatting instructions. Remove self-talk,
-backtracking, repeated calculations, and failed attempts. Give a concise derivation with every
-necessary logical step and no unnecessary ones; do not narrate exhaustive search. The final
-response must obey the user's requested answer format exactly.
+it is long, confused, or contradictory. Independently establish every claim from the user request;
+do not infer an answer merely because it appears in the scratch work. Never mention scratch work,
+editing, the prompt, a reference answer, a target, a checker, or formatting instructions. Remove
+self-talk, backtracking, repeated calculations, and failed attempts. Give a concise derivation with
+every necessary logical step and no unnecessary ones. Do not narrate plans, candidate approaches,
+or exhaustive search unless the search itself is the shortest proof. Do not appeal to tables,
+software, external sources, or "known" values without deriving the needed result. Prefer the
+shortest rigorous explanation that teaches the solution. The final response must obey the user's
+requested answer format exactly.
 
 Return exactly these two tagged sections with no text before or after them:
 <reasoning>
@@ -176,9 +219,6 @@ User request:
 
 Scratch work:
 {row.get("draft_generation", "")}
-
-Trusted verification target (never mention this in the output):
-{reference}
 """
         return [{"role": "user", "content": prompt}]
 
@@ -202,17 +242,6 @@ Trusted verification target (never mention this in the output):
         )
 
 
-def _reference_answer(raw: Any) -> str:
-    if not raw:
-        return "(none)"
-    try:
-        payload = json.loads(str(raw))
-        answer = payload.get("entry", {}).get("answer")
-        return "(none)" if answer is None else json.dumps(answer, ensure_ascii=False)
-    except (TypeError, ValueError, AttributeError):
-        return "(unreadable)"
-
-
 def build_vllm_processor(config: PipelineConfig, *, judge: bool, concurrency: int):
     batch_size = config.quality.judge.batch_size if judge else config.model.batch_size
     config_payload = config.model_dump(mode="json")
@@ -230,6 +259,13 @@ def build_vllm_processor(config: PipelineConfig, *, judge: bool, concurrency: in
         )
 
     return process
+
+
+def can_fuse_judge(config: PipelineConfig) -> bool:
+    judge = config.quality.judge
+    return judge.enabled and (
+        judge.model_source is None or judge.model_source == config.model.model_source
+    )
 
 
 def _candidate_seed(candidate_id: str, *, suffix: str) -> int:

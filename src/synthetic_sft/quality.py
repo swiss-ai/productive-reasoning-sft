@@ -17,6 +17,7 @@ from synthetic_sft.schemas import (
 )
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
+_REASONING_PREFIX = re.compile(r"^<reasoning>?\s*", re.IGNORECASE)
 
 
 def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
@@ -29,7 +30,8 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
         return reasoning or None, response or None, bool(reasoning and response)
     if "</reasoning>" in text and "<response>" in text:
-        reasoning = text.split("</reasoning>", 1)[0].removeprefix("<reasoning>").strip()
+        reasoning = text.split("</reasoning>", 1)[0]
+        reasoning = _REASONING_PREFIX.sub("", reasoning, count=1).strip()
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
         return reasoning or None, response or None, bool(reasoning and response)
     if "<reasoning>" in text and "<response>" in text:
@@ -134,9 +136,10 @@ Use only integer scores 1 through 5. A score measures the editing required befor
 safe and useful as training data, not its length or confidence.
 Keep each feedback string concrete and no longer than 30 words.
 
-5 — TRAINING-READY: correct, rigorous, direct, self-contained, and needs no edit. Every material
-    reasoning step is justified; there is no self-talk, answer-format chatter, backtracking,
-    repetition, or needless restatement. The final response follows the requested format exactly.
+5 — TRAINING-READY: exceptional, correct, rigorous, direct, self-contained, and needs no edit.
+    Every material reasoning step is justified and necessary; there is no planning narration,
+    self-talk, answer-format chatter, backtracking, repetition, avoidable enumeration, unsupported
+    lookup, or needless restatement. The final response follows the requested format exactly.
 4 — LIGHT EDIT: fully correct and reliable, with one minor clarity, style, or harmless redundancy
     issue. A small edit makes it training-ready.
 3 — SUBSTANTIVE LOCAL EDIT: the core approach/conclusion is mostly correct, but there is a
@@ -150,8 +153,11 @@ Keep each feedback string concrete and no longer than 30 words.
 Calibration examples:
 - Direct necessary steps followed by one useful check: reasoning 5.
 - Correct clean derivation with one harmless repeated sentence: reasoning 4.
+- Correct derivation that is substantially longer than necessary: reasoning 4 or lower.
 - Correct answer reached through repeated self-talk/recomputation or an unexplained key leap:
   reasoning 3, even though the answer is correct.
+- Reliance on an asserted table, external calculation, or "known value" for a material step:
+  reasoning 3 or lower unless that value is established in the trace.
 - Correct answer apparently reached by invalid reasoning: reasoning 2.
 - Wrong or unrelated work: reasoning 1.
 - Exact requested short answer with no extra material: response 5; concise is not a defect.
@@ -159,8 +165,11 @@ Calibration examples:
 - Mostly correct answer needing a meaningful localized correction: response 3.
 - Wrong result with some relevant content: response 2; wholly unusable response: response 1.
 
-Inspect the reasoning step by step and identify the earliest material defect. Treat a supplied
-reference as authoritative evidence, but do not copy source metadata into feedback.
+Audit the reasoning adversarially, step by step, and identify the earliest material defect. A 5 is
+appropriate only after finding no factual, logical, relevance, style, or self-containment defect;
+when in doubt between 4 and 5, use 4. A correct reference response does not prove that the reasoning
+is sound. Treat a supplied reference as authoritative evidence about the result, but do not copy
+source metadata into feedback.
 
 User request:
 {row.get("user_prompt", "")}

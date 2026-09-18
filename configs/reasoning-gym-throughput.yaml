@@ -1,5 +1,5 @@
 run:
-  run_id: reasoning-gym-throughput-tp1-v2
+  run_id: reasoning-gym-throughput-fused-v3
   output_dir: ../runs
   seed: 42
   resume: true
