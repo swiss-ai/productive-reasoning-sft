@@ -1,5 +1,5 @@
 run:
-  run_id: reasoning-gym-throughput-fused-v3
+  run_id: reasoning-gym-effort-medium-v1
   output_dir: ../runs
   seed: 42
   resume: true
@@ -41,7 +41,7 @@ quality:
     model_source: null
     batch_size: 16
     max_tokens: 768
-    rubric_version: 2
+    rubric_version: 3
 
 output:
   parquet_target_mb: 64
@@ -59,3 +59,4 @@ slurm:
   exclusive: true
   environment: ../container/cscs.toml
   image: "${SCRATCH}/images/synthetic-sft-v0.1.sqsh"
+

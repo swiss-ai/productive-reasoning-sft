@@ -57,7 +57,7 @@ class JudgeConfig(StrictModel):
     model_source: str | None = None
     batch_size: int = Field(default=64, gt=0)
     max_tokens: int = Field(default=512, gt=0)
-    rubric_version: int = Field(default=2, ge=1)
+    rubric_version: int = Field(default=3, ge=1)
 
 
 class QualityConfig(StrictModel):

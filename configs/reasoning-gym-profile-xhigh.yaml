@@ -1,0 +1,62 @@
+run:
+  run_id: reasoning-gym-effort-xhigh-v1
+  output_dir: ../runs
+  seed: 42
+  resume: true
+
+source:
+  adapter: reasoning_gym
+  num_samples: 105
+  system_prompt: null
+  params:
+    all_tasks: true
+
+model:
+  model_source: Qwen/Qwen3.8-27B
+  dtype: bfloat16
+  tensor_parallel_size: 1
+  max_model_len: 16384
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 64
+  batch_size: 8
+  trust_remote_code: false
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 4096
+    presence_penalty: 0.0
+    repetition_penalty: 1.0
+    reasoning_effort: xhigh
+
+generation:
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 4096
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 16
+    max_tokens: 768
+    rubric_version: 3
+
+output:
+  parquet_target_mb: 64
+  compression: zstd
+  prepared_shards_per_gpu: 4
+
+slurm:
+  nodes: 1
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "01:30:00"
+  partition: debug
+  account: infra01
+  qos: null
+  exclusive: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.1.sqsh"
+
