@@ -28,6 +28,15 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
         reasoning = text.split("<reasoning>", 1)[1].split("</reasoning>", 1)[0].strip()
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
         return reasoning or None, response or None, bool(reasoning and response)
+    if "</reasoning>" in text and "<response>" in text:
+        reasoning = text.split("</reasoning>", 1)[0].removeprefix("<reasoning>").strip()
+        response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
+        return reasoning or None, response or None, bool(reasoning and response)
+    if "<reasoning>" in text and "<response>" in text:
+        reasoning = text.split("<reasoning>", 1)[1].split("<response>", 1)[0]
+        reasoning = reasoning.strip().removesuffix("</think>").strip()
+        response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
+        return reasoning or None, response or None, bool(reasoning and response)
     json_text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         polished = json.loads(json_text)
