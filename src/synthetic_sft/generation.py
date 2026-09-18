@@ -53,6 +53,7 @@ class VLLMBatchPredictor:
             "tensor_parallel_size": model.tensor_parallel_size,
             "max_model_len": model.max_model_len,
             "gpu_memory_utilization": model.gpu_memory_utilization,
+            "max_num_seqs": model.max_num_seqs,
             "trust_remote_code": model.trust_remote_code,
             "enable_chunked_prefill": True,
             "seed": self.config.run.seed,

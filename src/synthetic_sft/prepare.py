@@ -95,7 +95,7 @@ def _rows_per_shard(config: PipelineConfig) -> int:
         config.slurm.nodes * config.slurm.gpus_per_node * config.output.prepared_shards_per_gpu
     )
     calculated = math.ceil(config.source.num_samples / target_parts)
-    return min(100_000, max(1_000, calculated))
+    return min(100_000, max(1, calculated))
 
 
 def _write_part(path: Path, part: int, rows: list[dict[str, object]], compression: str) -> None:

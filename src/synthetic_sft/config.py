@@ -40,6 +40,7 @@ class ModelConfig(StrictModel):
     tensor_parallel_size: int = Field(default=1, gt=0)
     max_model_len: int = Field(default=16384, gt=0)
     gpu_memory_utilization: float = Field(default=0.90, gt=0.0, lt=1.0)
+    max_num_seqs: int = Field(default=256, gt=0)
     batch_size: int = Field(default=64, gt=0)
     trust_remote_code: bool = False
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)

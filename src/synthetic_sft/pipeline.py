@@ -44,10 +44,13 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
         context = ray.data.DataContext.get_current()
         context.target_max_block_size = config.output.parquet_target_mb * 1024 * 1024
         replicas = available_gpu_replicas(config.model.tensor_parallel_size)
+        inference_blocks = replicas * config.output.prepared_shards_per_gpu
         generated_path = config.run_dir / "intermediate" / "generated"
         if not _stage_complete(config, "generated"):
             _rotate_incomplete(generated_path)
-            dataset = ray.data.read_parquet(str(seeds))
+            dataset = ray.data.read_parquet(
+                str(seeds), override_num_blocks=inference_blocks
+            )
             dataset = dataset.flat_map(
                 FanOutCandidates(
                     config.generation.rollouts_per_prompt,
@@ -55,6 +58,7 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                     config.model.model_source,
                 )
             )
+            dataset = dataset.repartition(inference_blocks, shuffle=False)
             generated = build_vllm_processor(config, judge=False, concurrency=replicas)(dataset)
             generated.write_parquet(str(generated_path), compression=config.output.compression)
             _mark_stage(config, "generated", generated_path)
@@ -62,7 +66,10 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
         candidates_path = config.run_dir / "candidates"
         if not _stage_complete(config, "candidates"):
             _rotate_incomplete(candidates_path)
-            candidates = ray.data.read_parquet(str(generated_path))
+            candidates = ray.data.read_parquet(
+                str(generated_path), override_num_blocks=inference_blocks
+            )
+            candidates = candidates.repartition(inference_blocks, shuffle=False)
             candidates = candidates.map(
                 ParseAndVerify(
                     config.source.adapter,
