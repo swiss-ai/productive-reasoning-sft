@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+ulimit -c 0
 
 : "${SFT_CONFIG:?SFT_CONFIG is required}"
 : "${SFT_ENVIRONMENT:?SFT_ENVIRONMENT is required}"
@@ -12,4 +13,3 @@ srun \
   --ntasks-per-node=1 \
   --environment="$SFT_ENVIRONMENT" \
   bash -lc "cd '$SFT_PROJECT_DIR' && python -m synthetic_sft.cli run '$SFT_CONFIG'"
-
