@@ -7,6 +7,7 @@ import pandas as pd
 from synthetic_sft.config import PipelineConfig
 from synthetic_sft.json_utils import stable_id
 from synthetic_sft.quality import FinalizeQuality, ParseAndVerify, judge_prompt
+from synthetic_sft.schemas import JudgeScores
 
 
 class FanOutCandidates:
@@ -33,12 +34,14 @@ class VLLMBatchPredictor:
     def __init__(self, config: dict[str, Any], judge: bool) -> None:
         try:
             from vllm import LLM, SamplingParams
+            from vllm.sampling_params import StructuredOutputsParams
         except ImportError as exc:
             raise RuntimeError(
                 "vLLM is unavailable; run generation in the NVIDIA vLLM container"
             ) from exc
 
         self._sampling_type = SamplingParams
+        self._structured_outputs_type = StructuredOutputsParams
         self.config = PipelineConfig.model_validate(config)
         self.judge = judge
         self.fused_judge = not judge and can_fuse_judge(self.config)
@@ -228,6 +231,9 @@ Scratch work:
                 temperature=0.0,
                 max_tokens=self.config.quality.judge.max_tokens,
                 seed=_candidate_seed(str(row["candidate_id"]), suffix="judge"),
+                structured_outputs=self._structured_outputs_type(
+                    json=JudgeScores.model_json_schema()
+                ),
             )
         if phase == "polish":
             return self._sampling_type(

@@ -1,0 +1,84 @@
+run:
+  run_id: reasoning-gym-hard-xhigh
+  output_dir: ../runs
+  seed: 42
+  resume: true
+
+source:
+  adapter: reasoning_gym
+  num_samples: 23
+  system_prompt: null
+  params:
+    tasks:
+      - name: arc_agi
+      - name: bf
+      - name: circuit_logic
+      - name: codeio
+      - name: count_primes
+      - name: countdown
+      - name: emoji_mystery
+      - name: figlet_font
+      - name: futoshiki
+      - name: knight_swap
+      - name: mahjong_puzzle
+      - name: palindrome_partitioning
+      - name: pool_matrix
+      - name: rearc
+      - name: rectangle_count
+      - name: rotten_oranges
+      - name: rubiks_cube
+      - name: rush_hour
+      - name: sentence_reordering
+      - name: sokoban
+      - name: sudoku
+      - name: tsumego
+      - name: word_ladder
+
+model:
+  model_source: Qwen/Qwen3.8-27B
+  dtype: bfloat16
+  tensor_parallel_size: 1
+  max_model_len: 32768
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 32
+  batch_size: 4
+  trust_remote_code: false
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 8192
+    presence_penalty: 0.0
+    repetition_penalty: 1.0
+    reasoning_effort: xhigh
+
+generation:
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 8192
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 16
+    max_tokens: 768
+    rubric_version: 3
+
+output:
+  parquet_target_mb: 64
+  compression: zstd
+  prepared_shards_per_gpu: 4
+
+slurm:
+  nodes: 1
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "01:30:00"
+  partition: debug
+  account: infra01
+  qos: null
+  exclusive: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.1.sqsh"

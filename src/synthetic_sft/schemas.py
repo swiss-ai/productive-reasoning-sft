@@ -77,13 +77,13 @@ ResponseIssue = Literal[
 class ReasoningAssessment(StrictModel):
     score: int = Field(ge=1, le=5)
     issues: list[ReasoningIssue] = Field(default_factory=list)
-    feedback: str = Field(min_length=1, max_length=2000)
+    feedback: str = Field(min_length=1, max_length=300)
 
 
 class ResponseAssessment(StrictModel):
     score: int = Field(ge=1, le=5)
     issues: list[ResponseIssue] = Field(default_factory=list)
-    feedback: str = Field(min_length=1, max_length=2000)
+    feedback: str = Field(min_length=1, max_length=300)
 
 
 class JudgeScores(StrictModel):
