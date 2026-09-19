@@ -64,18 +64,21 @@ class ReasoningGymAdapter(SourceAdapter):
         self, *, num_samples: int, seed: int, system_prompt: str | None
     ) -> Iterator[SeedRecord]:
         import reasoning_gym
+        from reasoning_gym.factory import DATASETS
 
         specs = self._task_specs()
+        canonical_tasks = [name for name in sorted(DATASETS) if name != "composite"]
+        task_seed_indices = {name: index for index, name in enumerate(canonical_tasks)}
         if self.params.get("all_tasks") and num_samples != len(specs):
             raise ValueError(
                 f"all_tasks requires num_samples={len(specs)} for exactly one example per task; "
                 f"got {num_samples}"
             )
         counts = self._allocate(num_samples, specs)
-        ordinal = 0
-        for task_index, (spec, count) in enumerate(zip(specs, counts, strict=True)):
+        for spec, count in zip(specs, counts, strict=True):
             if count == 0:
                 continue
+            task_index = task_seed_indices[spec["name"]]
             task_seed = seed + task_index * 1_000_003
             dataset = reasoning_gym.create_dataset(
                 spec["name"], size=count, seed=task_seed, **dict(spec["config"])
@@ -99,14 +102,15 @@ class ReasoningGymAdapter(SourceAdapter):
                     "source_dataset": source_dataset,
                 }
                 yield SeedRecord(
-                    sample_id=stable_id(self.name, seed, ordinal, spec["name"], question),
+                    sample_id=stable_id(
+                        self.name, seed, spec["name"], task_seed, local_index, question
+                    ),
                     system_prompt=system_prompt,
                     user_prompt=question,
                     source=f"reasoning_gym:{spec['name']}",
                     provenance_json=canonical_json(provenance),
                     verification_json=canonical_json(verification),
                 )
-                ordinal += 1
 
     def supports_verification(self, record: Mapping[str, Any]) -> bool:
         return bool(record.get("verification_json"))
