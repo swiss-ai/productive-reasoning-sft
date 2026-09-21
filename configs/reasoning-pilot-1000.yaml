@@ -83,4 +83,4 @@ slurm:
   qos: null
   exclusive: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.1.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.2.sqsh"
