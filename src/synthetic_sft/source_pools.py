@@ -6,6 +6,7 @@ import os
 import time
 from collections.abc import Iterable, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +74,7 @@ def _build_one(config: Mapping[str, Any], output: Path, raw_dir: Path) -> Path:
     kind = str(config["kind"])
     repo_id = str(config.get("repo_id", "reasoning-gym"))
     if kind == "reasoning_gym":
-        from reasoning_gym import __version__ as resolved_revision
+        resolved_revision = package_version("reasoning-gym")
     else:
         patterns = list(map(str, config.get("allow_patterns", [])))
         revision = config.get("revision")
@@ -418,10 +419,23 @@ def _reasoning_gym_rows(raw_dir: Path, repo_id: str, revision: str, config: Mapp
         "difficulty_weights", {"easy": 0.15, "medium": 0.35, "hard": 0.5}
     )
     task_counts = _allocate_counts(total, task_weights)
-    jobs = [
-        (task_index, task, task_count, seed, dict(difficulty_weights), repo_id, revision)
-        for task_index, (task, task_count) in enumerate(zip(tasks, task_counts, strict=True))
-    ]
+    chunk_size = int(config.get("task_chunk_size", 1_000))
+    jobs = []
+    for task_index, (task, task_count) in enumerate(zip(tasks, task_counts, strict=True)):
+        for chunk_index, chunk_start in enumerate(range(0, task_count, chunk_size)):
+            jobs.append(
+                (
+                    task_index,
+                    task,
+                    min(chunk_size, task_count - chunk_start),
+                    chunk_index,
+                    chunk_start,
+                    seed,
+                    dict(difficulty_weights),
+                    repo_id,
+                    revision,
+                )
+            )
     workers = min(int(config.get("workers", 16)), len(jobs))
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(_reasoning_gym_task_rows, job) for job in jobs]
@@ -437,7 +451,17 @@ def _reasoning_gym_task_rows(args: tuple[Any, ...]) -> list[tuple[dict[str, Any]
     )
     from reasoning_gym.factory import create_curriculum, has_curriculum
 
-    task_index, task, task_count, seed, difficulty_weights, repo_id, revision = args
+    (
+        task_index,
+        task,
+        task_count,
+        chunk_index,
+        chunk_start,
+        seed,
+        difficulty_weights,
+        repo_id,
+        revision,
+    ) = args
     fractions = {"easy": 0.2, "medium": 0.6, "hard": 1.0}
     band_names = list(difficulty_weights)
     band_counts = _allocate_counts(
@@ -447,7 +471,12 @@ def _reasoning_gym_task_rows(args: tuple[Any, ...]) -> list[tuple[dict[str, Any]
     for band, band_count in zip(band_names, band_counts, strict=True):
         if band_count == 0:
             continue
-        task_seed = seed + task_index * 1_000_003 + band_names.index(band) * 100_003
+        task_seed = (
+            seed
+            + task_index * 1_000_003
+            + band_names.index(band) * 100_003
+            + chunk_index * 10_007
+        )
         kwargs: dict[str, Any] = {"size": band_count, "seed": task_seed}
         if has_curriculum(task):
             curriculum = create_curriculum(task)
@@ -482,7 +511,8 @@ def _reasoning_gym_task_rows(args: tuple[Any, ...]) -> list[tuple[dict[str, Any]
                 metadata={
                     "task": task,
                     "task_seed": task_seed,
-                    "task_index": local_index,
+                    "task_index": chunk_start + local_index,
+                    "task_chunk": chunk_index,
                     "task_config": to_jsonable(kwargs),
                     "metadata": metadata,
                 },

@@ -33,22 +33,23 @@ class PoolAdapter(SourceAdapter):
         for source, source_count in zip(sources, source_counts, strict=True):
             if source_count == 0:
                 continue
-            rows = _sample_source(source, source_count, seed)
-            accepted = 0
-            for rank, row in rows:
-                normalized = " ".join(str(row["user_prompt"]).split()).casefold()
-                if normalized in seen_prompts:
-                    continue
-                seen_prompts.add(normalized)
-                selected.append((rank, row))
-                accepted += 1
-                if accepted == source_count:
-                    break
-            if accepted != source_count:
-                raise RuntimeError(
-                    f"pool {source.get('path')} supplied {accepted} unique rows, "
-                    f"but {source_count} were requested"
-                )
+            strata = _sample_source(source, source_count, seed)
+            for band, (target, rows) in strata.items():
+                accepted = 0
+                for rank, row in rows:
+                    normalized = " ".join(str(row["user_prompt"]).split()).casefold()
+                    if normalized in seen_prompts:
+                        continue
+                    seen_prompts.add(normalized)
+                    selected.append((rank, row))
+                    accepted += 1
+                    if accepted == target:
+                        break
+                if accepted != target:
+                    raise RuntimeError(
+                        f"pool {source.get('path')} supplied {accepted} unique {band!r} rows, "
+                        f"but {target} were requested"
+                    )
 
         # Hash order makes the final seed files independent of input shard order.
         for _, row in sorted(selected, key=lambda item: item[0]):
@@ -94,7 +95,9 @@ class PoolAdapter(SourceAdapter):
             return VerificationResult(score=None, error=f"{type(exc).__name__}: {exc}")
 
 
-def _sample_source(source: Mapping[str, Any], count: int, seed: int) -> list[tuple[int, dict]]:
+def _sample_source(
+    source: Mapping[str, Any], count: int, seed: int
+) -> dict[str, tuple[int, list[tuple[int, dict]]]]:
     path = Path(os.path.expandvars(str(source["path"]))).expanduser()
     dataset = pads.dataset(str(path), format="parquet", exclude_invalid_files=True)
     weights = source.get("difficulty_weights", {"hard": 0.5, "medium": 0.35, "easy": 0.15})
@@ -145,7 +148,7 @@ def _sample_source(source: Mapping[str, Any], count: int, seed: int) -> list[tup
             elif rank < -heap[0][0]:
                 heapq.heapreplace(heap, item)
 
-    rows: list[tuple[int, dict]] = []
+    strata: dict[str, tuple[int, list[tuple[int, dict]]]] = {}
     for band, target in targets.items():
         available_rows = sorted([(-rank, row) for rank, _, row in heaps[band]])
         if len(available_rows) < target:
@@ -153,9 +156,8 @@ def _sample_source(source: Mapping[str, Any], count: int, seed: int) -> list[tup
                 f"pool {path} has only {len(available_rows)} eligible {band!r} rows; "
                 f"requested {target}"
             )
-        rows.extend(available_rows)
-    rows.sort(key=lambda item: item[0])
-    return rows
+        strata[band] = (target, available_rows)
+    return strata
 
 
 def _allocate(total: int, weights: list[float]) -> list[int]:

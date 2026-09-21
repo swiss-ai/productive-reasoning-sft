@@ -7,6 +7,8 @@ sources:
     # Headroom above the 250K needed by a one-million-row launch at this source share.
     num_samples: 350000
     seed: 42
+    workers: 256
+    task_chunk_size: 50
     difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
     task_groups:
       core:
@@ -40,14 +42,13 @@ sources:
           - zebra_puzzles
           - coin_flip
       algorithmic:
-        weight: 0.25
+        weight: 0.30
         tasks:
           - binary_matrix
           - count_bits
           - cryptarithm
           - game_of_life
           - graph_color
-          - jugs
           - manipulate_matrix
           - rotate_matrix
           - spiral_matrix
@@ -61,18 +62,8 @@ sources:
           - maze
           - mini_sudoku
           - n_queens
-          - puzzle24
           - survo
           - tower_of_hanoi
-      challenge:
-        weight: 0.05
-        tasks:
-          - arc_1d
-          - game_of_life_halting
-          - letter_jumble
-          - modulo_grid
-          - number_sequence
-
   - name: deepscaler
     raw_name: agentica-org/DeepScaleR-Preview-Dataset
     kind: deepscaler
