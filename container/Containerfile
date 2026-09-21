@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=nvcr.io/nvidia/vllm:26.08-py3
+ARG BASE_IMAGE=docker.io/vllm/vllm-openai:qwen38-flash-next
 FROM ${BASE_IMAGE}
 
 WORKDIR /opt/synthetic-sft
