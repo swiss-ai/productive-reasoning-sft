@@ -77,8 +77,8 @@ slurm:
   nodes: 1
   gpus_per_node: 4
   cpus_per_node: 288
-  time: "12:00:00"
-  partition: normal
+  time: "01:30:00"
+  partition: debug
   account: infra01
   qos: null
   exclusive: true
