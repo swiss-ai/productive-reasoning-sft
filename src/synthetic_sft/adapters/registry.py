@@ -5,10 +5,12 @@ from typing import Any
 
 from synthetic_sft.adapters.base import SourceAdapter
 from synthetic_sft.adapters.parquet import ParquetAdapter
+from synthetic_sft.adapters.pool import PoolAdapter
 from synthetic_sft.adapters.reasoning_gym import ReasoningGymAdapter
 
 _ADAPTERS: dict[str, type[SourceAdapter]] = {
     ParquetAdapter.name: ParquetAdapter,
+    PoolAdapter.name: PoolAdapter,
     ReasoningGymAdapter.name: ReasoningGymAdapter,
 }
 

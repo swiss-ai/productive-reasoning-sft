@@ -79,7 +79,9 @@ class VLLMBatchPredictor:
             return frame
         records = frame.to_dict(orient="records")
         messages = [self._messages(row) for row in records]
-        sampling = [self._sampling(row, phase="judge" if self.judge else "draft") for row in records]
+        sampling = [
+            self._sampling(row, phase="judge" if self.judge else "draft") for row in records
+        ]
         template_kwargs = (
             {"enable_thinking": False}
             if self.judge

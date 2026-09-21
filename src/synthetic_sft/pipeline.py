@@ -49,9 +49,7 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
         if not _stage_complete(config, "generated"):
             stage_started = time.time()
             _rotate_incomplete(generated_path)
-            dataset = ray.data.read_parquet(
-                str(seeds), override_num_blocks=inference_blocks
-            )
+            dataset = ray.data.read_parquet(str(seeds), override_num_blocks=inference_blocks)
             dataset = dataset.flat_map(
                 FanOutCandidates(
                     config.generation.rollouts_per_prompt,
@@ -81,9 +79,9 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                     )
                 )
                 if config.quality.judge.enabled:
-                    candidates = build_vllm_processor(
-                        config, judge=True, concurrency=replicas
-                    )(candidates)
+                    candidates = build_vllm_processor(config, judge=True, concurrency=replicas)(
+                        candidates
+                    )
                 candidates = candidates.map(FinalizeQuality(config.model_dump(mode="json")))
             candidates.write_parquet(str(candidates_path), compression=config.output.compression)
             _mark_stage(config, "candidates", candidates_path, stage_started)
@@ -116,9 +114,7 @@ def _stage_complete(config: PipelineConfig, stage: str) -> bool:
     return True
 
 
-def _mark_stage(
-    config: PipelineConfig, stage: str, output: Path, started_at_unix: float
-) -> None:
+def _mark_stage(config: PipelineConfig, stage: str, output: Path, started_at_unix: float) -> None:
     if not any(output.rglob("*.parquet")):
         raise RuntimeError(f"stage {stage!r} produced no Parquet files in {output}")
     marker = _manifest_dir(config) / f"{stage}.json"

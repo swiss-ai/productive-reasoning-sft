@@ -13,7 +13,22 @@ Generate and judge synthetic SFT data on one or many Slurm nodes.
 
 ## Run it
 
-Edit `configs/reasoning-gym-smoke.yaml`, then submit one job:
+Prepare the reusable source pools once. Supplied solutions are preserved separately from prompts:
+
+```bash
+uv run synthetic-sft build-pools configs/source-pools.yaml
+```
+
+Then submit a run. The example draws a deterministic 1,000-prompt mixture with 50% of each
+difficulty-aware source allocated to its hard band:
+
+```bash
+uv run synthetic-sft submit configs/reasoning-pilot-1000.yaml
+```
+
+For a different run size, change `source.num_samples`; the source mixture is sampled from the same
+pools without downloading or rebuilding them. A single-source Reasoning Gym smoke run remains
+available:
 
 ```bash
 uv run synthetic-sft submit configs/reasoning-gym-smoke.yaml

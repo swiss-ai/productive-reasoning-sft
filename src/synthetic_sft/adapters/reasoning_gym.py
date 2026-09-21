@@ -145,15 +145,11 @@ def _answer_candidates(response: str) -> list[str]:
     candidates.extend(re.findall(r"\\boxed\{([^{}]+)\}", text))
     candidates.extend(
         f"{numerator}/{denominator}"
-        for numerator, denominator in re.findall(
-            r"\\d?frac\{([^{}]+)\}\{([^{}]+)\}", text
-        )
+        for numerator, denominator in re.findall(r"\\d?frac\{([^{}]+)\}\{([^{}]+)\}", text)
     )
     candidates.extend(
         match.strip()
-        for match in re.findall(
-            r"(?im)(?:final\s+answer|answer)\s*(?:is|:)\s*([^\n]+)", plain
-        )
+        for match in re.findall(r"(?im)(?:final\s+answer|answer)\s*(?:is|:)\s*([^\n]+)", plain)
     )
     nonempty_lines = [line.strip() for line in text.splitlines() if line.strip()]
     if nonempty_lines:

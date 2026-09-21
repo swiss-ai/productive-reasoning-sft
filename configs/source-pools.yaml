@@ -1,0 +1,102 @@
+output_dir: "${SCRATCH}/synthetic-sft-sources/pools"
+raw_dir: "${SCRATCH}/synthetic-sft-sources/raw"
+
+sources:
+  - name: reasoning-gym
+    kind: reasoning_gym
+    # Headroom above the 250K needed by a one-million-row launch at this source share.
+    num_samples: 350000
+    seed: 42
+    difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+    task_groups:
+      core:
+        weight: 0.60
+        tasks:
+          - complex_arithmetic
+          - polynomial_equations
+          - polynomial_multiplication
+          - advanced_geometry
+          - simple_geometry
+          - calendar_arithmetic
+          - decimal_arithmetic
+          - dice
+          - fraction_simplification
+          - gsm_symbolic
+          - number_format
+          - power_function
+          - prime_factorization
+          - time_intervals
+          - course_schedule
+          - family_relationships
+          - largest_island
+          - path_star
+          - shortest_path
+          - acre
+          - list_functions
+          - knights_knaves
+          - propositional_logic
+          - self_reference
+          - syllogism
+          - zebra_puzzles
+          - coin_flip
+      algorithmic:
+        weight: 0.25
+        tasks:
+          - binary_matrix
+          - count_bits
+          - cryptarithm
+          - game_of_life
+          - graph_color
+          - jugs
+          - manipulate_matrix
+          - rotate_matrix
+          - spiral_matrix
+          - string_manipulation
+          - string_synthesis
+      puzzles:
+        weight: 0.10
+        tasks:
+          - boxnet
+          - kakurasu
+          - maze
+          - mini_sudoku
+          - n_queens
+          - puzzle24
+          - survo
+          - tower_of_hanoi
+      challenge:
+        weight: 0.05
+        tasks:
+          - arc_1d
+          - game_of_life_halting
+          - letter_jumble
+          - modulo_grid
+          - number_sequence
+
+  - name: deepscaler
+    raw_name: agentica-org/DeepScaleR-Preview-Dataset
+    kind: deepscaler
+    repo_id: agentica-org/DeepScaleR-Preview-Dataset
+    allow_patterns:
+      - deepscaler.json
+
+  - name: deepmath
+    raw_name: zwhe99/DeepMath-103K
+    kind: deepmath
+    repo_id: zwhe99/DeepMath-103K
+    allow_patterns:
+      - data/*.parquet
+
+  - name: openmath
+    raw_name: nvidia/OpenMathReasoning
+    kind: openmath
+    repo_id: nvidia/OpenMathReasoning
+    allow_patterns:
+      - data/*.parquet
+
+  - name: openthoughts
+    raw_name: open-thoughts/OpenThoughts3-1.2M
+    kind: openthoughts
+    repo_id: open-thoughts/OpenThoughts3-1.2M
+    allow_patterns:
+      - data/*.parquet

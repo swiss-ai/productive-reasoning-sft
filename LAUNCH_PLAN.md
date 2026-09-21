@@ -6,17 +6,17 @@ dataset.
 
 ## Proposed pilot
 
-Start with **2,400 unique prompts** and one new rollout per prompt. Where a source already provides
+Start with **1,000 unique prompts** and one new rollout per prompt. Where a source already provides
 a solution, retain that solution as a separate candidate rather than replacing or discarding it.
 All candidates are judged and written, including failures.
 
 | Source | Prompts | Share | Initial treatment |
 |---|---:|---:|---|
-| Reasoning Gym | 600 | 25% | Generate; exact source verifier |
-| NVIDIA OpenMathReasoning | 720 | 30% | Generate; retain supplied traces as references/baselines |
-| DeepMath-103K | 480 | 20% | Generate; retain all three supplied R1 solutions |
-| DeepScaleR Preview | 240 | 10% | Usually retain the official solution; regenerate a paired subset |
-| OpenThoughts3-1.2M | 360 | 15% | Retain supplied trace; regenerate a paired subset |
+| Reasoning Gym | 250 | 25% | Generate; exact source verifier |
+| NVIDIA OpenMathReasoning | 300 | 30% | Generate; retain supplied traces as references/baselines |
+| DeepMath-103K | 200 | 20% | Generate; retain all three supplied R1 solutions |
+| DeepScaleR Preview | 100 | 10% | Usually retain the official solution; regenerate a paired subset |
+| OpenThoughts3-1.2M | 150 | 15% | Retain supplied trace; regenerate a paired subset |
 
 This is intentionally math-heavy for the first pilot because those sources have the strongest
 correctness signals. It is not the intended composition of a general-purpose final SFT mixture.
@@ -25,9 +25,9 @@ verification paths are credible.
 
 Use a mild difficulty tilt, not a hard-only distribution:
 
-- 25% easy/foundational
-- 40% medium/reasonable
-- 35% hard
+- 15% easy/foundational
+- 35% medium/reasonable
+- 50% hard
 
 Difficulty bands are source-native and remain in provenance. They are sampling strata, never a
 global claim that difficulty values from different sources are comparable.
@@ -41,7 +41,7 @@ Do not sample all 105 tasks uniformly. The initial 600-prompt mix should be:
 - 10% compact constraint puzzles
 - 5% experimental challenge tasks
 
-Within each group, use the same 25/40/35 easy/medium/hard split. Reasoning Gym has curricula for
+Within each group, use the same 15/35/50 easy/medium/hard split. Reasoning Gym has curricula for
 102 of 105 tasks, so difficulty should be selected from normalized curriculum levels rather than
 maintaining dozens of unrelated numeric knobs by hand.
 
@@ -87,8 +87,8 @@ not trustworthy enough to scale it.
 - Prefer `has_answer_extracted` in the first pilot. Hold converted proofs and the recovered
   `additional_problems` split back: NVIDIA reports that adding the recovered proof questions
   regressed SFT performance.
-- Stratify by `pass_rate_72b_tir`: 25% `[0.75, 1]`, 40% `(0.25, 0.75)`, 25% `(0, 0.25]`, and 10%
-  unavailable/zero for exploration. Record the exact value.
+- Stratify by `pass_rate_72b_tir`: 15% `[0.75, 1]`, 35% `(0.25, 0.75)`, and 50% `[0, 0.25]`.
+  Keep unavailable values in the reusable pool but outside the first run. Record the exact value.
 - Preserve the DeepSeek-R1/QwQ solution and model name. Use the expected answer for verification;
   use the old solution as judge reference and a retained baseline, not as hidden input to the new
   generator.
@@ -97,7 +97,7 @@ not trustworthy enough to scale it.
 
 - This is the main hard-math source: it has answers, topics, numeric difficulty, and three R1
   solutions per problem.
-- Sample 25% difficulty `<=4`, 40% `(4, 6.5]`, and 35% `>6.5`, while balancing the topic hierarchy.
+- Sample 15% difficulty `<=4`, 35% `(4, 6.5]`, and 50% `>6.5`, while balancing the topic hierarchy.
 - Retain all three source solutions. Generate a new solution, verify its final answer, and compare
   reasoning quality against the best source solution.
 
