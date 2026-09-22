@@ -56,7 +56,8 @@ Each run is written under `output_dir/run_id`:
 - `manifests/` records the exact run configuration and quality-details schema.
 
 SFT rows contain `sample_id`, `candidate_id`, `system_prompt`, `user_prompt`, `reasoning`, `response`,
-`answer_json`, `correctness_verdict`, `source`, `model`, `quality_score`, `quality_details_json`,
+`reasoning_num_tokens`, `response_num_tokens`, `answer_json`, `correctness_verdict`, `source`, `model`,
+`quality_score`, `quality_details_json`,
 `hygiene_status`, `correctness_only_eligible`, `productivity_filtered_eligible`,
 `exclusion_reasons_json`, and `provenance_json`.
 

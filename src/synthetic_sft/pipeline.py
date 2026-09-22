@@ -26,6 +26,8 @@ SFT_COLUMNS = [
     "user_prompt",
     "reasoning",
     "response",
+    "reasoning_num_tokens",
+    "response_num_tokens",
     "answer_json",
     "correctness_verdict",
     "source",

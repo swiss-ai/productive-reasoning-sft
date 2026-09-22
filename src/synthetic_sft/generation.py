@@ -20,6 +20,7 @@ from synthetic_sft.quality import (
     arbitration_prompt,
     critic_prompt,
     parse_answer_extraction,
+    split_reasoning,
 )
 from synthetic_sft.schemas import AnswerExtraction, JudgeScores, ModelHygieneAssessment
 
@@ -119,6 +120,15 @@ class VLLMBatchPredictor:
             row["draft_num_input_tokens"] = len(output.prompt_token_ids or [])
             row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
         self._polish(records)
+        tokenizer = self.llm.get_tokenizer()
+        for row in records:
+            reasoning, response, _ = split_reasoning(row.get("raw_generation"))
+            row["reasoning_num_tokens"] = (
+                len(tokenizer.encode(reasoning, add_special_tokens=False)) if reasoning else 0
+            )
+            row["response_num_tokens"] = (
+                len(tokenizer.encode(response, add_special_tokens=False)) if response else 0
+            )
         if self.fused_judge:
             self._quality(records)
         return pd.DataFrame.from_records(records)

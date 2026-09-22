@@ -223,6 +223,7 @@ The clean SFT dataset contains:
 
 - identifiers and original prompt;
 - `reasoning` and `response` as natural training text;
+- exact teacher-tokenizer counts for reasoning and final response;
 - `answer_json` and `correctness_verdict` for filtering;
 - `quality_score` and structured `quality_details_json`;
 - both SFT eligibility flags, hygiene status, and exclusion reasons;
