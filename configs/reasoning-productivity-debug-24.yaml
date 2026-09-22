@@ -1,0 +1,82 @@
+run:
+  run_id: reasoning-productivity-debug-24-v1
+  output_dir: ../runs
+  seed: 43
+  resume: true
+
+source:
+  adapter: pool
+  num_samples: 24
+  system_prompt: null
+  params:
+    sources:
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym/prompts"
+        weight: 0.25
+        difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/openmath/prompts"
+        weight: 0.35
+        subsets: [cot]
+        difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/deepmath/prompts"
+        weight: 0.25
+        difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/deepscaler/prompts"
+        weight: 0.10
+        difficulty_weights: {unknown: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/openthoughts/prompts"
+        weight: 0.05
+        domains: [math]
+        difficulty_weights: {unknown: 1.0}
+
+model:
+  model_source: Qwen/Qwen3.8-Flash-Next-FP8
+  dtype: auto
+  tensor_parallel_size: 4
+  max_model_len: 32768
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 16
+  batch_size: 8
+  trust_remote_code: false
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 16384
+    presence_penalty: 0.0
+    repetition_penalty: 1.0
+    reasoning_effort: xhigh
+
+generation:
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 8192
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 16
+    max_tokens: 768
+    analysis_samples: 2
+    analysis_max_tokens: 2048
+    hygiene_max_tokens: 384
+    reasoning_effort: medium
+    rubric_version: 4
+
+output:
+  parquet_target_mb: 64
+  compression: zstd
+  prepared_shards_per_gpu: 1
+
+slurm:
+  nodes: 1
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "01:30:00"
+  partition: debug
+  account: infra01
+  qos: null
+  exclusive: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.4.sqsh"

@@ -1,8 +1,10 @@
 # Pipeline design
 
-This document describes how a prompt becomes an auditable SFT row. The design keeps the training
-text natural while using stricter, structured machinery behind the scenes to establish correctness
-and quality.
+This document describes how a prompt becomes an auditable SFT row. The current direction is to
+test whether filtering **unproductive reasoning** from math/reasoning SFT improves the starting
+policy and early RL efficiency. The design keeps training text natural while evaluating
+correctness, completion, and reasoning productivity separately. It does not assume that shorter
+reasoning is inherently better: a long trace should pass when its steps make progress and finish.
 
 ## End-to-end flow
 
@@ -217,6 +219,19 @@ selection but retained for review; it is not silently treated as a confirmed fai
 live in `quality_details_json`. This makes the control and treatment selections reproducible while
 keeping every rollout available for calibration and alternative thresholds.
 
+These flags are **data preparation labels, not a demonstrated RL improvement**. Before using them
+for a large training run, manually review accepted and rejected traces across sources, difficulty
+bands, and lengths. In particular, check for false positives on useful exploration and false
+negatives on repeated checking. Calibrate Qwen's narrow prompts or replace the judge model if the
+findings are unreliable; do not silently turn uncertain findings into confirmed defects.
+
+The downstream experiment uses matched prompts, effort, training-token budget, and RL settings.
+Compare the correctness-only and productivity-filtered SFT checkpoints at RL step zero and through
+the same short climb. Report correctness and pass@k alongside completion, limit hits, repetition,
+tokens per correct answer, reward-bearing rollout groups, and early learning efficiency. RL can
+improve completion on its own, so a transient step-zero benefit must be weighed against the cost
+and any loss of hard-problem coverage.
+
 ## Output shape
 
 The clean SFT dataset contains:
@@ -269,8 +284,8 @@ The actual JSON includes concise feedback and every schema-required field.
 ## Scaling and recovery
 
 Each GPU actor processes a batch through generation, polishing, extraction, parallel critiques,
-arbitration, and focused hygiene checks before writing it. Increasing the number of nodes increases the number of independent
-actors; it does not introduce a central model server or per-sample scheduler.
+arbitration, and focused hygiene checks before writing it. Increasing the number of nodes increases
+the number of independent actors; it does not introduce a central model server or per-sample scheduler.
 
 Completed rollout blocks are durable. After interruption, the pipeline scans existing candidate IDs
 and generates only missing rollouts. Quality derivations are recomputed when candidates are

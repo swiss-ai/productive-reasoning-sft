@@ -1,27 +1,28 @@
-# Reasoning data launch plan
+# Math/reasoning SFT generation and filtering launch plan
 
 This is the working plan for choosing the data mix and generation profiles before a large run.
-The first run is deliberately small: it should tell us what deserves scale, not produce the final
-dataset.
+The immediate goal is to calibrate the **productive-reasoning filter** on real rollouts, then test
+whether it improves the starting policy for RL without suppressing useful long solutions. The
+first run is deliberately small: it should reveal correctness, completion, false-positive, and
+false-negative problems before scaling.
 
 ## Proposed pilot
 
-Start with **1,000 unique prompts** and one new rollout per prompt. Where a source already provides
-a solution, retain that solution as a separate candidate rather than replacing or discarding it.
-All candidates are judged and written, including failures.
+The proposed first run uses **1,000 unique prompts** and one new teacher rollout per prompt. Source
+solutions remain in a separate reference archive; the current pipeline does not automatically add
+them as SFT candidates. Every generated candidate is judged and written, including failures.
 
 | Source | Prompts | Share | Initial treatment |
 |---|---:|---:|---|
 | Reasoning Gym | 250 | 25% | Generate; exact source verifier |
-| NVIDIA OpenMathReasoning | 300 | 30% | Generate; retain supplied traces as references/baselines |
-| DeepMath-103K | 200 | 20% | Generate; retain all three supplied R1 solutions |
-| DeepScaleR Preview | 100 | 10% | Usually retain the official solution; regenerate a paired subset |
-| OpenThoughts3-1.2M | 150 | 15% | Retain supplied trace; regenerate a paired subset |
+| NVIDIA OpenMathReasoning | 350 | 35% | Generate; verify with source answer where possible |
+| DeepMath-103K | 250 | 25% | Generate; verify with source answer where possible |
+| DeepScaleR Preview | 100 | 10% | Generate; use source answer and archived solution for review |
+| OpenThoughts3-1.2M math | 50 | 5% | Generate; keep supplied traces in the reference archive |
 
-This is intentionally math-heavy for the first pilot because those sources have the strongest
-correctness signals. It is not the intended composition of a general-purpose final SFT mixture.
-Before the full launch, add verified code and broader science/general reasoning only after their
-verification paths are credible.
+This is intentionally math/reasoning-focused: it is the domain where repeated checking was
+observed and correctness is often measurable. It is not the intended general-purpose SFT mixture.
+Add code and broader domains only after their verification paths are credible.
 
 Use a mild difficulty tilt, not a hard-only distribution:
 
@@ -34,7 +35,7 @@ global claim that difficulty values from different sources are comparable.
 
 ## Reasoning Gym composition
 
-Do not sample all 105 tasks uniformly. The initial 600-prompt mix should be:
+Do not sample all Reasoning Gym tasks uniformly. Within its 250-prompt pilot slice, aim for:
 
 - 60% broadly useful math, logic, probability, and graph reasoning
 - 25% algorithmic and state-tracking reasoning
@@ -89,17 +90,17 @@ not trustworthy enough to scale it.
   regressed SFT performance.
 - Stratify by `pass_rate_72b_tir`: 15% `[0.75, 1]`, 35% `(0.25, 0.75)`, and 50% `[0, 0.25]`.
   Keep unavailable values in the reusable pool but outside the first run. Record the exact value.
-- Preserve the DeepSeek-R1/QwQ solution and model name. Use the expected answer for verification;
-  use the old solution as judge reference and a retained baseline, not as hidden input to the new
-  generator.
+- Preserve the DeepSeek-R1/QwQ solution and model name in the separate reference archive. The
+  current judge receives the expected answer where available, not the old trace. A paired
+  source-versus-teacher trajectory comparison is a later analysis.
 
 ### DeepMath-103K
 
 - This is the main hard-math source: it has answers, topics, numeric difficulty, and three R1
   solutions per problem.
 - Sample 15% difficulty `<=4`, 35% `(4, 6.5]`, and 50% `>6.5`, while balancing the topic hierarchy.
-- Retain all three source solutions. Generate a new solution, verify its final answer, and compare
-  reasoning quality against the best source solution.
+- Retain all three source solutions in the reference archive. Generate a new solution and verify
+  its final answer; compare against source solutions in a later paired analysis.
 
 ### DeepScaleR Preview
 
@@ -108,15 +109,15 @@ not trustworthy enough to scale it.
 - Prefer non-empty official solutions and use answer verification. Derive pilot strata from problem
   source, statement length, and a small baseline pass-rate probe; do not mistake length alone for
   difficulty.
-- Preserve official solutions by default. Regenerate only a paired subset until the new teacher
-  demonstrably improves rigor or language.
+- Preserve official solutions in the reference archive. Use the source answer where possible to
+  verify newly generated responses.
 
 ### OpenThoughts3-1.2M
 
 - It is 75K unique questions annotated 16 times with QwQ-32B, yielding 850K math, 250K code, and
   100K science traces. Group by the underlying question before sampling.
-- Pilot 120 unique prompts from each domain. Retain the supplied traces, and regenerate one trace
-  for a paired quality comparison.
+- The current pilot samples the math slice only. Supplied traces stay in the reference archive;
+  the SFT output contains newly generated rollouts.
 - Treat its difficulty label as a sampling signal. Since the published rows expose conversations
   rather than a general exact-answer field, correctness is judge/reference based unless a source
   record supplies a usable verifier.
@@ -143,7 +144,7 @@ Run effort levels as separate configurations; never vary effort sample by sample
 
 - Model: `Qwen/Qwen3.8-27B`, BF16
 - Layout: four tensor-parallel-1 replicas per 4xGH200 node
-- Effort: `medium` for the easy band, `xhigh` for medium/hard bands
+- Effort: compare `medium` and `xhigh` in separate runs, not sample by sample
 - Context/output: 32K context, 8K output initially
 - Use: establish cost and useful-throughput baselines only. It must pass manual trace review before
   it is approved as a production teacher.
@@ -169,19 +170,22 @@ backend later, not a prerequisite for deciding the data mix.
 
 ## Decision after the pilot
 
-Inspect a stratified sample of reasoning and final responses from every source, task group,
-difficulty band, and model profile. Then compare:
+Inspect a stratified sample of accepted and rejected reasoning/final responses from every source,
+task group, difficulty band, and model profile. Then compare:
 
 - exact-verification pass rate where available
 - score counts from 0 through 5, separately for reasoning and response
-- completion/degeneration rate and token-length distribution
-- useful throughput: verified and quality `>=4` candidates per GPU-hour
-- paired preference: retained source solution versus newly generated solution
+- completion, repeated checking, stalled-progress, and reasoning-limit rates;
+- exact reasoning-token distributions before and after filtering, including long correct traces;
+- false positives on useful exploration and false negatives on unproductive continuations;
+- useful throughput: correct, complete, productive candidates per GPU-hour;
+- later paired preference: archived source solution versus newly generated solution;
 - duplicate rate across all math sources
 
 Scale only strata whose samples are correct and genuinely training-ready. Keep every generated row
-in Parquet regardless of score; the launch mix controls what we generate, while downstream users
-remain free to choose their own quality threshold.
+in Parquet regardless of score. Before a large training run, compare correctness-only and
+productivity-filtered selections through matched SFT and RL. A cleaner but shorter-only policy
+that loses hard-problem coverage is not a success.
 
 ## Dataset references
 
