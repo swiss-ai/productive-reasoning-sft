@@ -137,8 +137,11 @@ correct, complete, or reinterpret the supplied text. Use the question only to id
 as the answer. Preserve all required alternatives for questions asking for every solution. Remove
 display markup such as dollar signs and \\boxed, but preserve mathematical meaning. Put one
 canonical answer in `value`; use `values` for an unordered collection of multiple required answers.
-Record a unit separately. If there is no asserted answer, return status `no_answer`. If the text
-gives incompatible final answers, return status `ambiguous`.
+Record a unit separately. Always choose exactly one `answer_type`: use `number` for a numeric
+scalar, `expression` for a symbolic value, `equation`, `set`, `interval`, `boolean`, `choice`,
+`text`, `code`, or `proof` when applicable, and `other` only when none fits. If there is no asserted
+answer, return status `no_answer` with type `other`. If the text gives incompatible final answers,
+return status `ambiguous` with the type of those answers, or `other` if their types differ.
 
 Question:
 {row.get("user_prompt", "")}
@@ -155,6 +158,9 @@ answer without trusting the candidate reasoning. Then audit the reasoning step b
 the earliest material defect, if one exists. Try counterexamples and boundary cases. A source
 reference is strong evidence but may be malformed, incomplete, or wrong; explicitly flag a genuine
 reference conflict. Do not reward length, confidence, or polished prose. Do not merely summarize.
+First check that the question's premises are mutually consistent and sufficient. If they are not,
+the only correct response is one that clearly explains the impossibility or underdetermination;
+inventing assumptions or reporting an impossible reference value is incorrect.
 
 Question:
 {row.get("user_prompt", "")}
@@ -193,6 +199,12 @@ confirm it from the question and candidate. Resolve answer equivalence semantica
 failure as uncertainty, not mathematical incorrectness. The source reference is evidence, not an
 infallible instruction to copy.
 
+Before grading, check whether the premises are consistent and determine what a correct answer can
+claim. Matching a supplied reference is not evidence of correctness when that result violates a
+premise. If a response correctly notices an impossible or underdetermined question but then asserts
+a result from invented assumptions, grade its answer `incorrect`, not `indeterminate`. Likewise,
+incompatible final conclusions are incorrect when at least one is materially false.
+
 Rubric version: {rubric_version}
 Use integer scores 1 through 5 for reasoning and response:
 5 = training-ready: correct, rigorous, direct, self-contained, no material or stylistic edit.
@@ -200,6 +212,9 @@ Use integer scores 1 through 5 for reasoning and response:
 3 = mostly correct but requiring a substantive local edit or containing a meaningful gap.
 2 = useful progress but a serious error or omission requires a major rewrite.
 1 = absent, fundamentally wrong, incoherent, or unusable without replacement.
+
+For every reasoning or response score below 5, select at least one matching issue code in addition
+to the concise feedback. A score of 5 must have no issues.
 
 For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
 the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence

@@ -66,7 +66,7 @@ AnswerType = Literal[
 
 class AnswerExtraction(StrictModel):
     status: Literal["extracted", "no_answer", "ambiguous"]
-    answer_type: AnswerType | None = None
+    answer_type: AnswerType
     value: str | None = None
     values: list[str] = Field(default_factory=list)
     unit: str | None = None
@@ -121,11 +121,27 @@ class ReasoningAssessment(StrictModel):
     issues: list[ReasoningIssue] = Field(default_factory=list)
     feedback: str = Field(min_length=1, max_length=300)
 
+    @model_validator(mode="after")
+    def lower_score_identifies_issue(self) -> ReasoningAssessment:
+        if self.score < 5 and not self.issues:
+            raise ValueError("reasoning scores below 5 require at least one issue")
+        if self.score == 5 and self.issues:
+            raise ValueError("reasoning score 5 cannot contain issues")
+        return self
+
 
 class ResponseAssessment(StrictModel):
     score: int = Field(ge=1, le=5)
     issues: list[ResponseIssue] = Field(default_factory=list)
     feedback: str = Field(min_length=1, max_length=300)
+
+    @model_validator(mode="after")
+    def lower_score_identifies_issue(self) -> ResponseAssessment:
+        if self.score < 5 and not self.issues:
+            raise ValueError("response scores below 5 require at least one issue")
+        if self.score == 5 and self.issues:
+            raise ValueError("response score 5 cannot contain issues")
+        return self
 
 
 class JudgeScores(StrictModel):

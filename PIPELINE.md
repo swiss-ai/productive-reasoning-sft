@@ -115,9 +115,14 @@ Two reviews are sampled in parallel in one model call. Thinking is enabled. Each
 
 1. establish final-answer correctness without trusting the candidate's reasoning;
 2. try counterexamples and boundary cases;
-3. locate the earliest material reasoning defect;
-4. treat the source reference as strong but fallible evidence;
-5. report concrete defects rather than summarize the solution.
+3. check that the question is internally consistent and sufficiently specified;
+4. locate the earliest material reasoning defect;
+5. treat the source reference as strong but fallible evidence;
+6. report concrete defects rather than summarize the solution.
+
+An impossible or underdetermined prompt is not automatically bad SFT data: a response that clearly
+identifies the defect can still be excellent. A response that notices the defect and then invents
+assumptions to force a numerical answer is incorrect.
 
 The number of parallel reviews, their effort, and their token budget are configured under
 `quality.judge`. Raw reviews remain in `critic_analyses_json` in the candidates dataset.
