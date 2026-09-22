@@ -40,7 +40,7 @@ Slurm resources. A single submission uses every requested node and GPU.
 To build the image first:
 
 ```bash
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.1.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.3.sqsh"
 ```
 
 ## Results
@@ -68,5 +68,5 @@ GROUP BY source, quality_score;
 naturally when no answer is available; verification is simply unavailable and judging supplies
 the quality signal. Source-specific fields are preserved inside `provenance_json`.
 
-Use a new `run_id` whenever you change the model, prompts, sampling, or quality policy. Completed
-stages resume automatically; incomplete outputs are preserved for inspection.
+Use a new `run_id` whenever you change the model, prompts, sampling, or quality policy. Restarting
+an interrupted run keeps every completed rollout and generates only the missing rows.
