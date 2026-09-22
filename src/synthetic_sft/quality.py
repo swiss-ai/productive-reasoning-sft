@@ -387,6 +387,9 @@ class FinalizeQuality:
         elif not zero_reasons and correctness_verdict == "indeterminate" and verifier.available:
             score_cap = 3
             cap_reasons.append("correctness_indeterminate")
+        if not zero_reasons and scores is not None and _has_material_judge_issue(scores):
+            score_cap = min(score_cap or 5, 3)
+            cap_reasons.append("material_judge_issue")
         if not zero_reasons and hygiene.status == "failed":
             score_cap = min(score_cap or 5, 2)
             cap_reasons.append("hygiene_defect")
@@ -476,6 +479,34 @@ def _json_list(raw: Any) -> list[Any]:
         return value if isinstance(value, list) else []
     except (TypeError, ValueError):
         return []
+
+
+def _has_material_judge_issue(scores: JudgeScores) -> bool:
+    """Do not let a rubric-inconsistent score of 4 admit a substantive defect."""
+    reasoning_issues = {
+        "absent",
+        "incomplete",
+        "factual_or_logical_error",
+        "unsupported_step",
+        "missing_critical_step",
+        "contradiction",
+        "meandering",
+        "repetition",
+        "unverifiable",
+    }
+    response_issues = {
+        "incorrect",
+        "incomplete",
+        "instruction_violation",
+        "format_violation",
+        "irrelevant",
+        "oververbose",
+        "unsupported_claim",
+    }
+    return bool(
+        reasoning_issues.intersection(scores.reasoning.issues)
+        or response_issues.intersection(scores.response.issues)
+    )
 
 
 def _correctness_verdict(row: Mapping[str, Any], scores: JudgeScores | None) -> str:

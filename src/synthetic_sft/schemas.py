@@ -268,6 +268,7 @@ class QualityDecision(StrictModel):
         Literal[
             "correctness_conflict",
             "correctness_indeterminate",
+            "material_judge_issue",
             "hygiene_defect",
             "hygiene_uncertain",
         ]
@@ -283,7 +284,7 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[5] = 5
+    schema_version: Literal[6] = 6
     aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
     answer: AnswerDetails

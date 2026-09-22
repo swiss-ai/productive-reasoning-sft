@@ -62,7 +62,7 @@ quality:
     analysis_max_tokens: 2048
     hygiene_max_tokens: 768
     reasoning_effort: medium
-    rubric_version: 5
+    rubric_version: 6
 
 output:
   parquet_target_mb: 64
@@ -79,4 +79,4 @@ slurm:
   qos: null
   exclusive: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.5.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.6.sqsh"

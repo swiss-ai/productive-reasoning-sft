@@ -106,7 +106,8 @@ The current 1–5 rubric is: 5 training-ready; 4 correct with a minor edit; 3 su
 repair; 2 useful progress but major rewrite; 1 unusable. Score 0 means confirmed incorrectness,
 incomplete generation, or failed quality machinery. A confirmed material hygiene defect caps the
 score at 2; hygiene uncertainty caps it at 3. Known-answer conflicts/indeterminate verification
-are capped at 3. All causes are explicit in `quality_details_json` (schema version 5).
+are capped at 3. A substantive issue code also caps a rubric-inconsistent score of 4 at 3.
+All causes are explicit in `quality_details_json` (schema version 6).
 
 Deterministic verification is deliberately typed: numeric expressions, equations, and sets use
 normalized symbolic equivalence; Boolean/choice answers use normalized exact match; Reasoning
@@ -171,11 +172,11 @@ tail GLM-5.2 via Swiss Model Launcher remains future work, not a dependency for 
 Use a fresh `run_id` whenever the model, source, sampling, or quality policy changes; completed
 stages have manifests tied to the resolved config. `configs/reasoning-productivity-debug-24.yaml`
 is the small real-rollout validation; `configs/reasoning-productivity-1000.yaml` is the first pilot.
-Both use the v0.5 image and a single Slurm job (no job arrays).
+Both use the v0.6 image and a single Slurm job (no job arrays).
 
 ```bash
 uv run synthetic-sft build-pools configs/source-pools.yaml
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.5.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.6.sqsh"
 uv run synthetic-sft submit configs/reasoning-productivity-debug-24.yaml
 ```
 
@@ -196,6 +197,17 @@ non-zero reward, all-zero rollout groups, reward distribution, early learning sp
 quality. A better step zero but same eventual RL may still save compute; cleaner but lower solution
 coverage means the filter is too aggressive. RL can learn to stop, so final response length alone
 is not the success metric.
+
+The paired 24-prompt debug runs (v1 and v2, seed 43) used identical prepared prompts. The v2
+pilot retained all 24 rows: scores were 13 at 5, 7 at 3, 1 at 2, and 3 at 0; 17 passed hygiene,
+6 were uncertain, and 1 failed. Focused-judge parse errors fell from 9 to 1 after raising its
+JSON budget and saving raw outputs. Manual review found a previously overrated yes/no proof with
+an unsupported central step; the v2 broad judge named the gap but rated it 4, while a focused
+finding excluded the row. The current rubric-6 postprocessing also caps substantive issue codes
+at 3; recalculating the 24 rows with that rule leaves 13 in the strict view. These are pilot
+diagnostics, **not** calibration of false-positive/false-negative rates or approval for a large
+generation run. In particular, the focused finding's explanation for the weak proof was partly
+unsound, so the judge still needs manual calibration.
 
 ## Backlog and boundaries
 
