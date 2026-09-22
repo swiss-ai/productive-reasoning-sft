@@ -8,12 +8,12 @@ For the visual data flow, verifier design, score semantics, and batching details
 1. The configured source produces prompts and provenance.
 2. The model solves each prompt, then rewrites its scratch work into clean reasoning and a final
    answer; both are stored separately.
-3. Final answers are extracted into a separate structured field and checked without changing the
-   training response. Two parallel critical reviews audit correctness and reasoning, then a final
-   arbiter grades reasoning and response separately from 1–5. Confirmed incorrectness is score `0`;
-   parser uncertainty is recorded as indeterminate instead of being treated as wrong.
-4. Every rollout is written to the SFT dataset. Filtering is left to the downstream query, so an
-   unusually good or bad batch is never distorted by a fixed top-k rule.
+3. The final answer is checked where possible. Critical reviewers judge correctness and general
+   quality; focused checks separately flag repeated steps, circular checking, stalled progress,
+   unresolved branches, reasoning-limit stops, and missing or malformed final answers.
+4. Every rollout is written to Parquet. Each row says whether it qualifies for a correctness-only
+   or productivity-filtered SFT dataset, with explicit reasons when it does not. No top-k cutoff
+   forces good or bad samples into either dataset.
 
 ## Run it
 
@@ -27,7 +27,7 @@ Then submit a run. The example draws a deterministic 1,000-prompt mixture with 5
 difficulty-aware source allocated to its hard band:
 
 ```bash
-uv run synthetic-sft submit configs/reasoning-pilot-1000.yaml
+uv run synthetic-sft submit configs/reasoning-productivity-1000.yaml
 ```
 
 For a different run size, change `source.num_samples`; the source mixture is sampled from the same
@@ -44,7 +44,7 @@ Slurm resources. A single submission uses every requested node and GPU.
 To build the image first:
 
 ```bash
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.3.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.4.sqsh"
 ```
 
 ## Results
@@ -52,19 +52,20 @@ To build the image first:
 Each run is written under `output_dir/run_id`:
 
 - `candidates/` contains every rollout plus operational and verification details.
-- `sft/` contains every rollout with stable training columns, ready to query by quality.
+- `sft/` contains every rollout with stable training columns and both selection flags.
 - `manifests/` records the exact run configuration and quality-details schema.
 
 SFT rows contain `sample_id`, `candidate_id`, `system_prompt`, `user_prompt`, `reasoning`, `response`,
-`answer_json`, `correctness_verdict`, `source`, `model`, `quality_score`, `quality_details_json`, and
-`provenance_json`.
+`answer_json`, `correctness_verdict`, `source`, `model`, `quality_score`, `quality_details_json`,
+`hygiene_status`, `correctness_only_eligible`, `productivity_filtered_eligible`,
+`exclusion_reasons_json`, and `provenance_json`.
 
 The Parquet datasets can be queried directly:
 
 ```sql
-SELECT source, quality_score, count(*)
-FROM read_parquet('runs/reasoning-gym-all-tasks-quality-v4/sft/**/*.parquet')
-GROUP BY source, quality_score;
+SELECT source, correctness_only_eligible, productivity_filtered_eligible, count(*)
+FROM read_parquet('runs/reasoning-productivity-1000-v1/sft/**/*.parquet')
+GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 
 ## Using another source

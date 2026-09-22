@@ -6,6 +6,12 @@ from typing import Any
 import pandas as pd
 
 from synthetic_sft.config import PipelineConfig
+from synthetic_sft.hygiene import (
+    SEMANTIC_CATEGORIES,
+    hygiene_prompt,
+    parse_hygiene_assessment,
+    repeated_span_signal,
+)
 from synthetic_sft.json_utils import canonical_json, stable_id
 from synthetic_sft.quality import (
     FinalizeQuality,
@@ -15,7 +21,7 @@ from synthetic_sft.quality import (
     critic_prompt,
     parse_answer_extraction,
 )
-from synthetic_sft.schemas import AnswerExtraction, JudgeScores
+from synthetic_sft.schemas import AnswerExtraction, JudgeScores, ModelHygieneAssessment
 
 
 class FanOutCandidates:
@@ -105,9 +111,7 @@ class VLLMBatchPredictor:
             "enable_thinking": True,
             "reasoning_effort": self.config.model.sampling.reasoning_effort,
         }
-        results = self._chat(
-            records, messages, sampling, template_kwargs, phase="generation"
-        )
+        results = self._chat(records, messages, sampling, template_kwargs, phase="generation")
         for row, output in results:
             candidate = output.outputs[0]
             row["draft_generation"] = candidate.text
@@ -142,7 +146,7 @@ class VLLMBatchPredictor:
                 except Exception as exc:
                     prefix = (
                         "judge_generation"
-                        if phase in {"answer_extraction", "critique", "arbitration"}
+                        if phase in {"answer_extraction", "critique", "arbitration", "hygiene"}
                         else "generation"
                     )
                     row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
@@ -184,8 +188,57 @@ class VLLMBatchPredictor:
             self._parse_and_verify.verify(row)
         self._run_critiques(records)
         self._arbitrate(records)
+        self._run_hygiene(records)
         for row in records:
             self._finalize_quality(row)
+
+    def _run_hygiene(self, records: list[dict[str, Any]]) -> None:
+        """One batched wave: a narrow, structured request per semantic failure category."""
+        requests: list[dict[str, Any]] = []
+        messages = []
+        sampling = []
+        max_tokens = self.config.quality.judge.hygiene_max_tokens
+        for index, row in enumerate(records):
+            signal = repeated_span_signal(str(row.get("reasoning") or ""))
+            signal_text = signal[0][:500] if signal is not None else ""
+            for category in SEMANTIC_CATEGORIES:
+                request = {
+                    "candidate_id": f"{row['candidate_id']}:hygiene:{category}",
+                    "row_index": index,
+                    "category": category,
+                }
+                prompt = hygiene_prompt(
+                    row, category, signal_text if category == "repetition" else ""
+                )
+                fitted = self._fit_prompt(prompt, max_tokens)
+                request["prompt_truncated"] = fitted != prompt
+                requests.append(request)
+                messages.append([{"role": "user", "content": fitted}])
+                sampling.append(
+                    self._structured_sampling(
+                        request, ModelHygieneAssessment, max_tokens, "hygiene"
+                    )
+                )
+        results = self._chat(
+            requests,
+            messages,
+            sampling,
+            {"enable_thinking": False},
+            phase="hygiene",
+        )
+        findings: list[list[dict[str, Any]]] = [[] for _ in records]
+        for request, output in results:
+            index = int(request["row_index"])
+            finding = parse_hygiene_assessment(
+                output.outputs[0].text,
+                category=request["category"],
+                reasoning=str(records[index].get("reasoning") or ""),
+                response=str(records[index].get("response") or ""),
+                truncated=bool(request["prompt_truncated"]),
+            )
+            findings[index].append(finding.model_dump(mode="json"))
+        for index, row in enumerate(records):
+            row["hygiene_findings_json"] = canonical_json(findings[index])
 
     def _extract_answers(self, records: list[dict[str, Any]]) -> None:
         requests: list[dict[str, Any]] = []

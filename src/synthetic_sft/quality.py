@@ -7,6 +7,7 @@ from typing import Any
 
 from synthetic_sft.adapters import create_adapter
 from synthetic_sft.config import PipelineConfig
+from synthetic_sft.hygiene import build_hygiene_details
 from synthetic_sft.schemas import (
     AnswerDetails,
     AnswerExtraction,
@@ -14,6 +15,7 @@ from synthetic_sft.schemas import (
     JudgeScores,
     QualityDecision,
     QualityDetails,
+    SelectionDetails,
     ValidityDetails,
     VerifierDetails,
 )
@@ -27,11 +29,11 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
     if not raw:
         return None, None, False
     text = raw.strip()
-    if "<reasoning>" in text and "</reasoning>" in text and "<response>" in text:
+    if all(tag in text for tag in ("<reasoning>", "</reasoning>", "<response>", "</response>")):
         reasoning = text.split("<reasoning>", 1)[1].split("</reasoning>", 1)[0].strip()
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
         return reasoning or None, response or None, bool(reasoning and response)
-    if "</reasoning>" in text and "<response>" in text:
+    if all(tag in text for tag in ("</reasoning>", "<response>", "</response>")):
         reasoning = text.split("</reasoning>", 1)[0]
         reasoning = _REASONING_PREFIX.sub("", reasoning, count=1).strip()
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
@@ -40,7 +42,7 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
         reasoning = text.split("<reasoning>", 1)[1].split("<response>", 1)[0]
         reasoning = reasoning.strip().removesuffix("</think>").strip()
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
-        return reasoning or None, response or None, bool(reasoning and response)
+        return reasoning or None, response or None, False
     json_text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         polished = json.loads(json_text)
@@ -48,7 +50,7 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
             reasoning = polished.get("reasoning")
             response = polished.get("response")
             if isinstance(reasoning, str) and reasoning.strip() and isinstance(response, str):
-                return reasoning.strip(), response.strip() or None, True
+                return reasoning.strip(), response.strip() or None, bool(response.strip())
     except (TypeError, ValueError):
         pass
     if "<think>" in text:
@@ -56,10 +58,18 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
         if "</think>" not in after_start:
             return after_start.strip() or None, None, False
         reasoning, _, response = after_start.partition("</think>")
-        return reasoning.strip() or None, response.strip() or None, True
+        return (
+            reasoning.strip() or None,
+            response.strip() or None,
+            bool(reasoning.strip() and response.strip()),
+        )
     if "</think>" in text:
         reasoning, _, response = text.partition("</think>")
-        return reasoning.strip() or None, response.strip() or None, True
+        return (
+            reasoning.strip() or None,
+            response.strip() or None,
+            bool(reasoning.strip() and response.strip()),
+        )
     return None, text, False
 
 
@@ -81,7 +91,9 @@ class ParseAndVerify:
         raw = row.get("raw_generation")
         reasoning, response, parsed = split_reasoning(str(raw) if raw is not None else None)
         finish_reason = row.get("finish_reason")
-        generation_complete = response is not None and finish_reason not in {"length", "abort"}
+        generation_complete = (
+            parsed and response is not None and finish_reason not in {"length", "abort"}
+        )
         if raw is None:
             generation_status = "failed"
             generation_error = row.get("generation_error") or "generation returned no output"
@@ -197,8 +209,7 @@ reference is reliable, and every material reasoning or response defect you can s
 
 def arbitration_prompt(row: Mapping[str, Any], analyses: list[str], rubric_version: int) -> str:
     rendered = "\n\n".join(
-        f"Independent critique {index + 1}:\n{analysis}"
-        for index, analysis in enumerate(analyses)
+        f"Independent critique {index + 1}:\n{analysis}" for index, analysis in enumerate(analyses)
     )
     return f"""You are the final conservative arbiter for SFT data quality. Validate the independent
 critiques below instead of blindly following either one. A claimed defect counts only if you can
@@ -335,6 +346,11 @@ class FinalizeQuality:
             finish_reason=row.get("finish_reason"),
             generation_complete=bool(row.get("generation_complete")),
         )
+        hygiene = build_hygiene_details(
+            row,
+            enabled=judge_config.enabled,
+            model=judge_config.model_source or self.config.model.model_source,
+        )
         raw_aggregate = judge.aggregate
         candidate_answer = _answer(row.get("answer_json"))
         reference_answer = _answer(row.get("reference_answer_json"))
@@ -346,6 +362,8 @@ class FinalizeQuality:
             zero_reasons.append("answer_incorrect")
         if judge.enabled and (judge.error is not None or judge.aggregate is None):
             zero_reasons.append("judge_error")
+        if hygiene.errors and judge.enabled and "judge_error" not in zero_reasons:
+            zero_reasons.append("judge_error")
         cap_reasons = []
         score_cap = None
         if not zero_reasons and correctness_verdict == "conflict":
@@ -354,9 +372,39 @@ class FinalizeQuality:
         elif not zero_reasons and correctness_verdict == "indeterminate" and verifier.available:
             score_cap = 3
             cap_reasons.append("correctness_indeterminate")
+        if not zero_reasons and hygiene.status == "failed":
+            score_cap = min(score_cap or 5, 2)
+            cap_reasons.append("hygiene_defect")
+        elif not zero_reasons and hygiene.status == "indeterminate":
+            score_cap = min(score_cap or 5, 3)
+            cap_reasons.append("hygiene_uncertain")
         aggregate = 0 if zero_reasons else raw_aggregate
         if aggregate is not None and score_cap is not None:
             aggregate = min(aggregate, score_cap)
+        correctness_only = (
+            validity.generation_complete
+            and correctness_verdict in {"verified", "supported"}
+            and candidate_answer is not None
+            and candidate_answer.status == "extracted"
+            and judge.error is None
+        )
+        exclusion_reasons = []
+        if not validity.generation_complete:
+            exclusion_reasons.append("generation_incomplete")
+        if correctness_verdict not in {"verified", "supported"}:
+            exclusion_reasons.append(f"correctness_{correctness_verdict}")
+        if candidate_answer is None or candidate_answer.status != "extracted":
+            exclusion_reasons.append("final_answer_unavailable")
+        if judge.error is not None or hygiene.errors:
+            exclusion_reasons.append("judge_error")
+        if hygiene.status != "passed":
+            exclusion_reasons.append(f"hygiene_{hygiene.status}")
+            exclusion_reasons.extend(f"hygiene_{item}" for item in hygiene.failure_categories)
+        selection = SelectionDetails(
+            correctness_only=correctness_only,
+            productivity_filtered=correctness_only and hygiene.status == "passed",
+            exclusion_reasons=exclusion_reasons,
+        )
         details = QualityDetails(
             aggregate_score=aggregate,
             decision=QualityDecision(
@@ -376,9 +424,15 @@ class FinalizeQuality:
             verifier=verifier,
             judge=judge,
             validity=validity,
+            hygiene=hygiene,
+            selection=selection,
         )
         row["quality_score"] = aggregate
         row["correctness_verdict"] = correctness_verdict
+        row["hygiene_status"] = hygiene.status
+        row["correctness_only_eligible"] = selection.correctness_only
+        row["productivity_filtered_eligible"] = selection.productivity_filtered
+        row["exclusion_reasons_json"] = json.dumps(selection.exclusion_reasons)
         row["quality_details_json"] = details.as_json()
         return row
 

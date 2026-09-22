@@ -32,6 +32,10 @@ SFT_COLUMNS = [
     "model",
     "quality_score",
     "quality_details_json",
+    "hygiene_status",
+    "correctness_only_eligible",
+    "productivity_filtered_eligible",
+    "exclusion_reasons_json",
     "provenance_json",
 ]
 
@@ -60,9 +64,7 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
             else:
                 _rotate_incomplete(generated_path)
                 completed_ids = set()
-            expected_candidates = (
-                config.source.num_samples * config.generation.rollouts_per_prompt
-            )
+            expected_candidates = config.source.num_samples * config.generation.rollouts_per_prompt
             if len(completed_ids) > expected_candidates:
                 raise RuntimeError(
                     f"generated stage has {len(completed_ids)} unique candidates, "

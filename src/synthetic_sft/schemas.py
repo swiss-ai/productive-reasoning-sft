@@ -209,6 +209,51 @@ class ValidityDetails(StrictModel):
     generation_complete: bool
 
 
+HygieneCategory = Literal[
+    "repetition",
+    "circular_rechecking",
+    "no_new_progress",
+    "unresolved_branch",
+    "reasoning_limit_stop",
+    "final_answer_missing_or_malformed",
+]
+
+
+class ModelHygieneAssessment(StrictModel):
+    verdict: Literal["defect", "clear", "uncertain"]
+    evidence: list[str] = Field(default_factory=list, max_length=2)
+    explanation: str = Field(min_length=1, max_length=400)
+
+    @model_validator(mode="after")
+    def defect_has_evidence(self) -> ModelHygieneAssessment:
+        if self.verdict == "defect" and not self.evidence:
+            raise ValueError("a confirmed defect requires an exact excerpt")
+        return self
+
+
+class HygieneFinding(StrictModel):
+    category: HygieneCategory
+    verdict: Literal["defect", "clear", "uncertain"]
+    method: Literal["deterministic", "model"]
+    evidence: list[str] = Field(default_factory=list)
+    explanation: str = Field(min_length=1)
+    error: str | None = None
+
+
+class HygieneDetails(StrictModel):
+    status: Literal["passed", "failed", "indeterminate", "not_run"]
+    model: str | None = None
+    findings: list[HygieneFinding] = Field(default_factory=list)
+    failure_categories: list[HygieneCategory] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class SelectionDetails(StrictModel):
+    correctness_only: bool
+    productivity_filtered: bool
+    exclusion_reasons: list[str] = Field(default_factory=list)
+
+
 QualityZeroReason = Literal[
     "generation_incomplete",
     "answer_incorrect",
@@ -219,9 +264,14 @@ QualityZeroReason = Literal[
 class QualityDecision(StrictModel):
     raw_aggregate_score: int | None = Field(default=None, ge=1, le=5)
     score_cap: int | None = Field(default=None, ge=1, le=5)
-    score_cap_reasons: list[Literal["correctness_conflict", "correctness_indeterminate"]] = Field(
-        default_factory=list
-    )
+    score_cap_reasons: list[
+        Literal[
+            "correctness_conflict",
+            "correctness_indeterminate",
+            "hygiene_defect",
+            "hygiene_uncertain",
+        ]
+    ] = Field(default_factory=list)
     zeroed: bool
     zero_reasons: list[QualityZeroReason] = Field(default_factory=list)
 
@@ -233,16 +283,16 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[4] = 4
+    schema_version: Literal[5] = 5
     aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
     answer: AnswerDetails
-    correctness_verdict: Literal[
-        "verified", "supported", "incorrect", "conflict", "indeterminate"
-    ]
+    correctness_verdict: Literal["verified", "supported", "incorrect", "conflict", "indeterminate"]
     verifier: VerifierDetails
     judge: JudgeDetails
     validity: ValidityDetails
+    hygiene: HygieneDetails
+    selection: SelectionDetails
 
     @model_validator(mode="after")
     def decision_is_consistent(self) -> QualityDetails:

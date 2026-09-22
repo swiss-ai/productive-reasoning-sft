@@ -25,13 +25,18 @@ flowchart LR
     G2 --> H
     F --> H
 
+    D --> V[Focused hygiene checks<br/>one batched wave]
     H --> I[Correctness verdict<br/>and 1–5 quality]
-    I --> J[Parquet candidates]
-    I --> K[Clean SFT Parquet]
+    V --> I
+
+    I --> J[All candidates in Parquet]
+    I --> K[All SFT rows with<br/>two eligibility flags]
 ```
 
 Every rollout reaches both outputs. Nothing is removed by top-k selection. Broken or confirmed
 incorrect generations receive score `0`; uncertain cases remain present with an explicit verdict.
+The two eligibility flags support the matched correctness-only and productivity-filtered SFT
+comparison without silently deleting any rollout.
 
 At a glance, the data and the quality evidence remain separate:
 
@@ -42,9 +47,10 @@ prompt ──► scratch solution ──► clean reasoning + response ───
                                                │
 source answer ──► extracted reference ─────────┼──► exact check ─┐
                                                │                 ├──► final verdict + score
-clean reasoning + response ──► two critical reviews ─────────────┘
+clean reasoning + response ──► two critical reviews ─────────────┤
+clean reasoning + response ──► focused hygiene checks ────────────┘
 
-                           no row is dropped; downstream users choose their threshold
+                correctness-only and productivity-filtered flags; no row is dropped
 ```
 
 ## What the model produces
@@ -63,10 +69,11 @@ Long inputs are budgeted before polishing. If the full scratch trace would leave
 the pipeline preserves its beginning and end and marks the omitted middle. The original draft is
 still retained in the candidates dataset.
 
-## Three batched quality waves
+## Batched quality waves
 
-All waves run through the already-loaded model actor. They are batched across rows; there is no
-request-response loop per sample and no model reload between phases.
+All waves run through the already-loaded model actor when the judge uses the teacher model. They
+are batched across rows; there is no model reload between phases. A different judge model can be
+configured later without changing the output contract.
 
 ### Wave 1: answer extraction
 
@@ -144,6 +151,28 @@ The lower of reasoning and response quality is the raw quality score. This means
 answer cannot hide an invalid derivation, and a good derivation cannot excuse a wrong user-facing
 answer.
 
+### Wave 4: focused trajectory hygiene
+
+Four narrow semantic requests per candidate are submitted together in one batched call. Each
+checks **one** failure: repeated steps, circular re-checking, continuation without new progress,
+or an unresolved contradiction/abandoned branch. The initial reviewer is the configured Qwen
+judge; a cross-family judge can be substituted if manual calibration exposes false negatives.
+
+Each check returns `defect`, `clear`, or `uncertain`, plus a concise explanation. A claimed defect
+must quote exact text from the stored reasoning; unanchored claims become uncertain and are
+recorded as judge errors. If context had to be truncated, a `clear` verdict becomes uncertain
+because the omitted middle was not inspected. A repeated-span signal is computed locally and
+shown to the repetition reviewer; only an extreme, long repeated span is an automatic defect.
+
+Two further checks are deterministic: whether generation stopped at the token limit, and whether
+the separate final answer is absent, ambiguous, or unextractable. The final-answer check does not
+pretend an extractor failure proves the answer wrong; it records uncertainty. All six findings,
+including evidence and errors, are in `quality_details_json.hygiene`.
+
+Productivity does **not** mean universally short output. Necessary exploration, one useful
+independent check, and explicit self-correction should pass. Length should fit the problem; the
+filter targets work that repeatedly consumes tokens without advancing a solution.
+
 ## Correctness verdicts
 
 `correctness_verdict` is deliberately separate from `quality_score`:
@@ -171,9 +200,22 @@ equivalence or a bad reference.
 | `1` | unusable without replacement |
 | `0` | broken generation, failed quality machinery, or confirmed incorrect answer |
 
-Known-answer conflicts and indeterminate checks are capped at `3`. Parser and infrastructure errors
-never masquerade as mathematical failures. All caps and zero reasons are explicit in
-`quality_details_json`.
+Known-answer conflicts and indeterminate verification are capped at `3`. A confirmed material
+hygiene defect caps quality at `2`; uncertain hygiene caps it at `3`. Missing judge output or
+unanchored claimed evidence is a judge error and scores `0`, not mathematical incorrectness.
+All caps and zero reasons are explicit in `quality_details_json`.
+
+## Selection for the matched SFT comparison
+
+Both selection rules require a complete generation, an extracted final answer, and a `verified`
+or high-confidence `supported` correctness verdict. The productivity-filtered rule additionally
+requires all six hygiene checks to pass. An indeterminate check is excluded from this strict
+selection but retained for review; it is not silently treated as a confirmed failure.
+
+`correctness_only_eligible`, `productivity_filtered_eligible`, `hygiene_status`, and
+`exclusion_reasons_json` are top-level SFT columns. The same information and per-category evidence
+live in `quality_details_json`. This makes the control and treatment selections reproducible while
+keeping every rollout available for calibration and alternative thresholds.
 
 ## Output shape
 
@@ -183,6 +225,7 @@ The clean SFT dataset contains:
 - `reasoning` and `response` as natural training text;
 - `answer_json` and `correctness_verdict` for filtering;
 - `quality_score` and structured `quality_details_json`;
+- both SFT eligibility flags, hygiene status, and exclusion reasons;
 - source, model, and arbitrary provenance JSON.
 
 The candidates dataset additionally retains drafts, token counts, finish reasons, extractor output,
@@ -192,7 +235,7 @@ An abbreviated quality record looks like:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "correctness_verdict": "verified",
   "answer": {
     "candidate": {"status": "extracted", "answer_type": "expression", "value": "5\\sqrt{5}"},
@@ -207,6 +250,14 @@ An abbreviated quality record looks like:
       "response": {"score": 5, "issues": []}
     }
   },
+  "hygiene": {
+    "status": "passed",
+    "failure_categories": [],
+    "findings": [
+      {"category": "circular_rechecking", "verdict": "clear", "method": "model", "evidence": []}
+    ]
+  },
+  "selection": {"correctness_only": true, "productivity_filtered": true, "exclusion_reasons": []},
   "decision": {"zeroed": false, "zero_reasons": [], "score_cap": null},
   "aggregate_score": 5
 }
@@ -216,8 +267,8 @@ The actual JSON includes concise feedback and every schema-required field.
 
 ## Scaling and recovery
 
-Each GPU actor processes a batch through generation, polishing, extraction, parallel critiques, and
-arbitration before writing it. Increasing the number of nodes increases the number of independent
+Each GPU actor processes a batch through generation, polishing, extraction, parallel critiques,
+arbitration, and focused hygiene checks before writing it. Increasing the number of nodes increases the number of independent
 actors; it does not introduce a central model server or per-sample scheduler.
 
 Completed rollout blocks are durable. After interruption, the pipeline scans existing candidate IDs
