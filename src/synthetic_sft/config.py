@@ -30,7 +30,7 @@ class SamplingConfig(StrictModel):
     max_tokens: int = Field(default=8192, gt=0)
     presence_penalty: float = 0.0
     repetition_penalty: float = Field(default=1.0, gt=0.0)
-    reasoning_effort: str = Field(default="medium", pattern=r"^(low|medium|high|xhigh)$")
+    reasoning_effort: str = Field(default="medium", pattern=r"^(low|medium|xhigh)$")
 
 
 class ModelConfig(StrictModel):

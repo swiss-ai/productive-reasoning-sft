@@ -1,5 +1,5 @@
 run:
-  run_id: reasoning-quality-high-64-v1
+  run_id: reasoning-quality-medium-64-v1
   output_dir: ../runs
   seed: 42
   resume: true
@@ -49,10 +49,10 @@ model:
     temperature: 1.0
     top_p: 0.95
     top_k: 20
-    max_tokens: 8192
+    max_tokens: 16384
     presence_penalty: 0.0
     repetition_penalty: 1.0
-    reasoning_effort: high
+    reasoning_effort: medium
 
 generation:
   rollouts_per_prompt: 1
