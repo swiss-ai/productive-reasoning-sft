@@ -176,12 +176,12 @@ class VLLMBatchPredictor:
 
     def _quality(self, records: list[dict[str, Any]]) -> None:
         for row in records:
-            self._parse_and_verify(row)
+            self._parse_and_verify.parse(row)
         self._extract_answers(records)
         # Structured extraction makes heterogeneous source answers safe for deterministic
         # comparison. Native source checkers may also use the extracted answer as a candidate.
         for row in records:
-            self._parse_and_verify(row)
+            self._parse_and_verify.verify(row)
         self._run_critiques(records)
         self._arbitrate(records)
         for row in records:
@@ -231,6 +231,7 @@ class VLLMBatchPredictor:
             if extracted is not None:
                 field = "answer_json" if target == "candidate" else "reference_answer_json"
                 records[index][field] = canonical_json(extracted.model_dump(mode="json"))
+                records[index][f"{target}_answer_method"] = "model"
             if error is not None:
                 records[index][f"{target}_answer_error"] = error
             seen.add((index, target))
@@ -240,6 +241,11 @@ class VLLMBatchPredictor:
                 records[key[0]][f"{key[1]}_answer_error"] = request.get(
                     "judge_generation_error", "answer extraction failed"
                 )
+        for row in records:
+            fallback = _atomic_reference_fallback(row)
+            if fallback is not None:
+                row["reference_answer_json"] = canonical_json(fallback.model_dump(mode="json"))
+                row["reference_answer_method"] = "atomic_source_fallback"
 
     def _run_critiques(self, records: list[dict[str, Any]]) -> None:
         requests: list[dict[str, Any]] = []
@@ -327,7 +333,8 @@ every necessary logical step and no unnecessary ones. Do not narrate plans, cand
 or exhaustive search unless the search itself is the shortest proof. Do not appeal to tables,
 software, external sources, or "known" values without deriving the needed result. Prefer the
 shortest rigorous explanation that teaches the solution. The final response must obey the user's
-requested answer format exactly.
+requested answer format exactly. If the request is inconsistent or underdetermined, explain the
+specific defect and stop; never invent a correction, add assumptions, or solve speculative variants.
 
 Return exactly these two tagged sections with no text before or after them:
 <reasoning>
@@ -441,3 +448,34 @@ def _json_string_list(raw: Any) -> list[str]:
         return [str(item) for item in value] if isinstance(value, list) else []
     except (TypeError, ValueError):
         return []
+
+
+def _atomic_reference_fallback(row: dict[str, Any]) -> AnswerExtraction | None:
+    """Recover a bare source answer when the model incorrectly calls it absent."""
+    raw_reference = _reference_text(row.get("verification_json"))
+    if raw_reference is None:
+        return None
+    text = raw_reference.strip()
+    if not text or len(text) > 200 or len(text.splitlines()) > 2:
+        return None
+    try:
+        candidate = AnswerExtraction.model_validate_json(str(row.get("answer_json") or ""))
+        reference = AnswerExtraction.model_validate_json(
+            str(row.get("reference_answer_json") or "")
+        )
+    except Exception:
+        return None
+    comparable = {"number", "expression", "equation", "boolean", "choice"}
+    if (
+        candidate.status != "extracted"
+        or candidate.answer_type not in comparable
+        or candidate.value is None
+        or candidate.values
+        or reference.status != "no_answer"
+    ):
+        return None
+    return AnswerExtraction(
+        status="extracted",
+        answer_type=candidate.answer_type,
+        value=text,
+    )

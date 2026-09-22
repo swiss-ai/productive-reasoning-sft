@@ -74,6 +74,10 @@ class ParseAndVerify:
         self.threshold = verifier_threshold
 
     def __call__(self, row: dict[str, Any]) -> dict[str, Any]:
+        self.parse(row)
+        return self.verify(row)
+
+    def parse(self, row: dict[str, Any]) -> dict[str, Any]:
         raw = row.get("raw_generation")
         reasoning, response, parsed = split_reasoning(str(raw) if raw is not None else None)
         finish_reason = row.get("finish_reason")
@@ -96,7 +100,10 @@ class ParseAndVerify:
             generation_status=generation_status,
             generation_error=generation_error,
         )
+        return row
 
+    def verify(self, row: dict[str, Any]) -> dict[str, Any]:
+        response = row.get("response")
         available = self.adapter.supports_verification(row)
         score: float | None = None
         error: str | None = None
@@ -212,6 +219,10 @@ Use integer scores 1 through 5 for reasoning and response:
 3 = mostly correct but requiring a substantive local edit or containing a meaningful gap.
 2 = useful progress but a serious error or omission requires a major rewrite.
 1 = absent, fundamentally wrong, incoherent, or unusable without replacement.
+
+Speculative alternative solutions, invented assumptions, or a second incompatible conclusion are
+substantive defects, never minor style issues: response quality is at most 3, and correctness is
+`incorrect` when the response presents the fabricated result as an answer to the original question.
 
 For every reasoning or response score below 5, select at least one matching issue code in addition
 to the concise feedback. A score of 5 must have no issues.
@@ -355,7 +366,12 @@ class FinalizeQuality:
                 zeroed=bool(zero_reasons),
                 zero_reasons=zero_reasons,
             ),
-            answer=AnswerDetails(candidate=candidate_answer, reference=reference_answer),
+            answer=AnswerDetails(
+                candidate=candidate_answer,
+                reference=reference_answer,
+                candidate_method=row.get("candidate_answer_method"),
+                reference_method=row.get("reference_answer_method"),
+            ),
             correctness_verdict=correctness_verdict,
             verifier=verifier,
             judge=judge,

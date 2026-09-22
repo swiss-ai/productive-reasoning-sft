@@ -175,7 +175,7 @@ def _verify_extracted(
         return parse(
             f"\\[\\boxed{{{value}}}\\]",
             extraction_config=extraction,
-            parsing_timeout=None,
+            parsing_timeout=5,
         )
 
     remaining = [parsed(item) for item in candidate_items]
@@ -189,7 +189,7 @@ def _verify_extracted(
             (
                 index
                 for index, predicted in enumerate(remaining)
-                if verify(gold, predicted, timeout_seconds=None)
+                if verify(gold, predicted, timeout_seconds=5)
             ),
             None,
         )

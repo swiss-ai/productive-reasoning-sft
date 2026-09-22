@@ -76,6 +76,10 @@ The candidate extractor sees only the question and final response. It never sees
 reference, so it cannot copy the expected answer or be persuaded by the derivation. The reference
 extractor independently sees only the question and source answer.
 
+For a short, atomic source answer such as `2020`, a conservative local fallback recovers the token
+if the model incorrectly labels it absent. It borrows only the candidate's broad answer kind and
+never changes either value; long explanations and multi-answer references still defer to review.
+
 An extraction records:
 
 ```json

@@ -82,6 +82,8 @@ class AnswerExtraction(StrictModel):
 class AnswerDetails(StrictModel):
     candidate: AnswerExtraction | None = None
     reference: AnswerExtraction | None = None
+    candidate_method: Literal["model"] | None = None
+    reference_method: Literal["model", "atomic_source_fallback"] | None = None
 
 
 class CorrectnessAssessment(StrictModel):
@@ -121,6 +123,11 @@ class ReasoningAssessment(StrictModel):
     issues: list[ReasoningIssue] = Field(default_factory=list)
     feedback: str = Field(min_length=1, max_length=300)
 
+    @field_validator("issues", mode="before")
+    @classmethod
+    def issues_are_unique(cls, value: Any) -> Any:
+        return list(dict.fromkeys(value)) if isinstance(value, list) else value
+
     @model_validator(mode="after")
     def lower_score_identifies_issue(self) -> ReasoningAssessment:
         if self.score < 5 and not self.issues:
@@ -134,6 +141,11 @@ class ResponseAssessment(StrictModel):
     score: int = Field(ge=1, le=5)
     issues: list[ResponseIssue] = Field(default_factory=list)
     feedback: str = Field(min_length=1, max_length=300)
+
+    @field_validator("issues", mode="before")
+    @classmethod
+    def issues_are_unique(cls, value: Any) -> Any:
+        return list(dict.fromkeys(value)) if isinstance(value, list) else value
 
     @model_validator(mode="after")
     def lower_score_identifies_issue(self) -> ResponseAssessment:
