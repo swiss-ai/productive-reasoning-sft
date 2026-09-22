@@ -15,7 +15,8 @@ For the full project context, pipeline design, pilot mix, and backlog, see [AGEN
    quality; focused checks separately flag repeated steps, circular checking, stalled progress,
    unresolved branches, reasoning-limit stops, and missing or malformed final answers.
 4. Every rollout is written to Parquet. Each row says whether it qualifies for a correctness-only
-   or productivity-filtered SFT dataset, with explicit reasons when it does not. No top-k cutoff
+   or productivity-filtered SFT dataset (passing hygiene and quality ≥4), with explicit reasons
+   when it does not. No top-k cutoff
    forces good or bad samples into either dataset.
 
 Filtering criteria are distinct: repeated spans/steps, circular re-checking, continuation without

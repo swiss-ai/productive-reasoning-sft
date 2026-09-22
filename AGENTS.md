@@ -124,7 +124,8 @@ blindly aggregating the critiques. The hybrid rule/model design follows ideas in
 **No rollout is deleted by selection.** `sft/` contains every candidate with clean training
 columns and metadata. `correctness_only_eligible` requires a complete rollout, extractable final
 answer, and verified or high-confidence supported correctness.
-`productivity_filtered_eligible` adds a passing hygiene status. `exclusion_reasons_json` and
+`productivity_filtered_eligible` adds a passing hygiene status and quality score of at least 4.
+`exclusion_reasons_json` and
 `quality_details_json.hygiene.findings` explain why a candidate did not enter the stricter view.
 The same Parquet rows support alternative downstream thresholds; there is no per-batch top-k rule.
 

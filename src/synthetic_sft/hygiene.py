@@ -258,8 +258,8 @@ def _deterministic_findings(row: Mapping[str, Any]) -> list[HygieneFinding]:
     elif answer_status == "ambiguous":
         verdict, explanation = (
             "uncertain",
-            "The extractor found multiple apparent answers; equivalent forms or required alternatives "
-            "need review before calling the final response malformed.",
+            "The extractor found multiple apparent answers; equivalent forms or required "
+            "alternatives need review before calling the final response malformed.",
         )
     elif answer_status == "extracted":
         verdict, explanation = "clear", "A separate, extractable final answer is present."

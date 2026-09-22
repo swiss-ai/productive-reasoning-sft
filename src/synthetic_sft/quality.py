@@ -412,12 +412,19 @@ class FinalizeQuality:
             exclusion_reasons.append("final_answer_unavailable")
         if judge.error is not None or hygiene.errors:
             exclusion_reasons.append("judge_error")
+        if aggregate is None or aggregate < 4:
+            exclusion_reasons.append("quality_below_4")
         if hygiene.status != "passed":
             exclusion_reasons.append(f"hygiene_{hygiene.status}")
             exclusion_reasons.extend(f"hygiene_{item}" for item in hygiene.failure_categories)
         selection = SelectionDetails(
             correctness_only=correctness_only,
-            productivity_filtered=correctness_only and hygiene.status == "passed",
+            productivity_filtered=(
+                correctness_only
+                and hygiene.status == "passed"
+                and aggregate is not None
+                and aggregate >= 4
+            ),
             exclusion_reasons=exclusion_reasons,
         )
         details = QualityDetails(
