@@ -43,6 +43,9 @@ def split_reasoning(raw: str | None) -> tuple[str | None, str | None, bool]:
         reasoning = reasoning.strip().removesuffix("</think>").strip()
         response = text.split("<response>", 1)[1].split("</response>", 1)[0].strip()
         return reasoning or None, response or None, False
+    if "<reasoning>" in text:
+        reasoning = text.split("<reasoning>", 1)[1].split("</reasoning>", 1)[0].strip()
+        return reasoning or None, None, False
     json_text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         polished = json.loads(json_text)
@@ -156,6 +159,8 @@ correct, complete, or reinterpret the supplied text. Use the question only to id
 as the answer. Preserve all required alternatives for questions asking for every solution. Remove
 display markup such as dollar signs and \\boxed, but preserve mathematical meaning. Put one
 canonical answer in `value`; use `values` for an unordered collection of multiple required answers.
+Equivalent exact, parameterized, and numerical forms of the same answer are not incompatible:
+extract the most precise form. An intermediate expression is not a second final answer.
 Record a unit separately. Always choose exactly one `answer_type`: use `number` for a numeric
 scalar, `expression` for a symbolic value, `equation`, `set`, `interval`, `boolean`, `choice`,
 `text`, `code`, or `proof` when applicable, and `other` only when none fits. If there is no asserted
@@ -177,6 +182,10 @@ answer without trusting the candidate reasoning. Then audit the reasoning step b
 the earliest material defect, if one exists. Try counterexamples and boundary cases. A source
 reference is strong evidence but may be malformed, incomplete, or wrong; explicitly flag a genuine
 reference conflict. Do not reward length, confidence, or polished prose. Do not merely summarize.
+For proof questions, distinguish a correct yes/no conclusion from an actually established proof.
+Verify the claimed theorem's precise hypotheses and conclusion when possible; an unnamed theorem,
+an unsupported dimension/counting leap, or a citation that does not imply the required claim is a
+material reasoning gap even if the source answer and final yes/no agree.
 First check that the question's premises are mutually consistent and sufficient. If they are not,
 the only correct response is one that clearly explains the impossibility or underdetermination;
 inventing assumptions or reporting an impossible reference value is incorrect.
@@ -230,6 +239,12 @@ Use integer scores 1 through 5 for reasoning and response:
 3 = mostly correct but requiring a substantive local edit or containing a meaningful gap.
 2 = useful progress but a serious error or omission requires a major rewrite.
 1 = absent, fundamentally wrong, incoherent, or unusable without replacement.
+
+Grade the reasoning independently of the final answer: a correct answer or matching source
+reference cannot validate an unsupported proof. If a central step is asserted without a derivation
+or a theorem with checked hypotheses, reasoning is at most 2, with `unsupported_step` or
+`missing_critical_step`. Do not confuse a valid, well-known theorem used with stated hypotheses
+for a gap. For a counterexample, check its defining properties and the claimed failure explicitly.
 
 Speculative alternative solutions, invented assumptions, or a second incompatible conclusion are
 substantive defects, never minor style issues: response quality is at most 3, and correctness is

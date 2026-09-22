@@ -59,7 +59,7 @@ class JudgeConfig(StrictModel):
     max_tokens: int = Field(default=512, gt=0)
     analysis_samples: int = Field(default=2, ge=1, le=4)
     analysis_max_tokens: int = Field(default=2048, gt=0)
-    hygiene_max_tokens: int = Field(default=384, gt=0)
+    hygiene_max_tokens: int = Field(default=768, gt=0)
     reasoning_effort: str = Field(default="medium", pattern=r"^(low|medium|xhigh)$")
     rubric_version: int = Field(default=4, ge=1)
 

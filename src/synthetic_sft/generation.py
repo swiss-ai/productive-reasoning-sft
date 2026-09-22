@@ -237,10 +237,18 @@ class VLLMBatchPredictor:
             phase="hygiene",
         )
         findings: list[list[dict[str, Any]]] = [[] for _ in records]
+        raw_outputs: list[dict[str, dict[str, Any]]] = [{} for _ in records]
         for request, output in results:
             index = int(request["row_index"])
+            candidate = output.outputs[0]
+            raw_outputs[index][str(request["category"])] = {
+                "text": candidate.text,
+                "finish_reason": candidate.finish_reason,
+                "num_generated_tokens": len(candidate.token_ids or []),
+                "prompt_truncated": bool(request["prompt_truncated"]),
+            }
             finding = parse_hygiene_assessment(
-                output.outputs[0].text,
+                candidate.text,
                 category=request["category"],
                 reasoning=str(records[index].get("reasoning") or ""),
                 response=str(records[index].get("response") or ""),
@@ -249,6 +257,7 @@ class VLLMBatchPredictor:
             findings[index].append(finding.model_dump(mode="json"))
         for index, row in enumerate(records):
             row["hygiene_findings_json"] = canonical_json(findings[index])
+            row["hygiene_raw_outputs_json"] = canonical_json(raw_outputs[index])
 
     def _extract_answers(self, records: list[dict[str, Any]]) -> None:
         requests: list[dict[str, Any]] = []

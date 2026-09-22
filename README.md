@@ -36,7 +36,7 @@ Build the image, then submit a run. The example draws a deterministic 1,000-prom
 50% of each difficulty-aware source allocated to its hard band:
 
 ```bash
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.4.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.5.sqsh"
 uv run synthetic-sft submit configs/reasoning-productivity-1000.yaml
 ```
 

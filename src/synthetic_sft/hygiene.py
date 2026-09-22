@@ -58,6 +58,8 @@ Return `defect` only for a material, directly observable instance. Quote one or 
 contiguous excerpts from the reasoning (or the final response for an unresolved branch) that prove
 it; explain why they show this specific failure. For repetition or circular re-checking, show both
 occurrences or quote an identical span that appears twice.
+Keep each excerpt under 120 characters and the explanation under 40 words. If you cannot quote
+the evidence exactly, return `uncertain`, not `defect`.
 Return `clear` if you inspected the trace and found no such failure. Return `uncertain` if the
 available text cannot settle it. Never invent a quotation or claim to have inspected omitted text.
 The response must be only the requested JSON object.
@@ -251,8 +253,14 @@ def _deterministic_findings(row: Mapping[str, Any]) -> list[HygieneFinding]:
         answer_status = None
     if not response.strip():
         verdict, explanation = "defect", "The separate final response is missing."
-    elif answer_status in {"no_answer", "ambiguous"}:
+    elif answer_status == "no_answer":
         verdict, explanation = "defect", f"Final-answer extraction returned {answer_status}."
+    elif answer_status == "ambiguous":
+        verdict, explanation = (
+            "uncertain",
+            "The extractor found multiple apparent answers; equivalent forms or required alternatives "
+            "need review before calling the final response malformed.",
+        )
     elif answer_status == "extracted":
         verdict, explanation = "clear", "A separate, extractable final answer is present."
     else:

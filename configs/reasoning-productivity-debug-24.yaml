@@ -1,5 +1,5 @@
 run:
-  run_id: reasoning-productivity-debug-24-v1
+  run_id: reasoning-productivity-debug-24-v2
   output_dir: ../runs
   seed: 43
   resume: true
@@ -60,9 +60,9 @@ quality:
     max_tokens: 768
     analysis_samples: 2
     analysis_max_tokens: 2048
-    hygiene_max_tokens: 384
+    hygiene_max_tokens: 768
     reasoning_effort: medium
-    rubric_version: 4
+    rubric_version: 5
 
 output:
   parquet_target_mb: 64
@@ -79,4 +79,4 @@ slurm:
   qos: null
   exclusive: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.4.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.5.sqsh"

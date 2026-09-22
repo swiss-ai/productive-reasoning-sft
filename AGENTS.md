@@ -170,11 +170,11 @@ tail GLM-5.2 via Swiss Model Launcher remains future work, not a dependency for 
 Use a fresh `run_id` whenever the model, source, sampling, or quality policy changes; completed
 stages have manifests tied to the resolved config. `configs/reasoning-productivity-debug-24.yaml`
 is the small real-rollout validation; `configs/reasoning-productivity-1000.yaml` is the first pilot.
-Both use the v0.4 image and a single Slurm job (no job arrays).
+Both use the v0.5 image and a single Slurm job (no job arrays).
 
 ```bash
 uv run synthetic-sft build-pools configs/source-pools.yaml
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.4.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.5.sqsh"
 uv run synthetic-sft submit configs/reasoning-productivity-debug-24.yaml
 ```
 
