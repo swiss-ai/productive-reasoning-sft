@@ -1,9 +1,9 @@
 # Project handoff: synthetic SFT for productive reasoning
 
 Read this file first when working in this repository. It consolidates the project direction,
-pipeline design, launch plan, and backlog. `README.md` is the short user guide; `PIPELINE.md`,
-`LAUNCH_PLAN.md`, and `BACKLOG.md` retain the fuller original discussions. The working issue text
-is `/iopsstor/scratch/cscs/tchu/post-training-sync/proposal.md`.
+pipeline design, launch plan, and backlog; `README.md` is the short user guide. The working issue
+text is `/iopsstor/scratch/cscs/tchu/post-training-sync/proposal.md`. The GitHub repository is
+`swiss-ai/productive-reasoning-sft`; the Python package and CLI remain named `synthetic-sft`.
 
 ## Goal and motivation
 
@@ -107,6 +107,19 @@ repair; 2 useful progress but major rewrite; 1 unusable. Score 0 means confirmed
 incomplete generation, or failed quality machinery. A confirmed material hygiene defect caps the
 score at 2; hygiene uncertainty caps it at 3. Known-answer conflicts/indeterminate verification
 are capped at 3. All causes are explicit in `quality_details_json` (schema version 5).
+
+Deterministic verification is deliberately typed: numeric expressions, equations, and sets use
+normalized symbolic equivalence; Boolean/choice answers use normalized exact match; Reasoning
+Gym can use its native scorer. Free text or proofs are not forced through a brittle exact checker.
+Candidate and reference answers are extracted independently before comparison, with math markup
+added only inside the verifier; the training response is unchanged. A reference answer is strong
+but fallible evidence, not an instruction to copy. The judge should distinguish an impossible or
+underdetermined question from a candidate that invents assumptions to answer it. Broad critiques
+look for counterexamples and the earliest material defect; arbitration confirms rather than
+blindly aggregating the critiques. The hybrid rule/model design follows ideas in
+[Qwen3](https://arxiv.org/html/2505.09388), [Kimi k1.5](https://arxiv.org/html/2501.12599v4),
+[DeepSeekMath-V2](https://arxiv.org/html/2511.22570v1), and
+[GLM-4.5](https://arxiv.org/html/2508.06471).
 
 **No rollout is deleted by selection.** `sft/` contains every candidate with clean training
 columns and metadata. `correctness_only_eligible` requires a complete rollout, extractable final

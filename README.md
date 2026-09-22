@@ -1,4 +1,4 @@
-# synthetic-sft
+# Productive Reasoning SFT
 
 Generate and evaluate large-scale synthetic SFT data on one or many Slurm nodes. The current focus
 is **productive math/reasoning trajectories**: reasoning that reaches a correct final answer without
@@ -6,12 +6,11 @@ getting stuck in repeated checking or continuing without progress. This is meant
 cleaner cold-start SFT improves the starting point and early efficiency of a later RL climb. It is
 not an assumption that shorter reasoning is always better or that RL cannot learn to stop itself.
 
-For the visual data flow, verifier design, score semantics, and batching details, see
-[Pipeline design](PIPELINE.md).
+For the full project context, pipeline design, pilot mix, and backlog, see [AGENTS.md](AGENTS.md).
 
 1. A varied math/reasoning source produces prompts and provenance.
-2. A large teacher model solves each prompt, then rewrites its scratch work into clean reasoning and a final
-   answer; both are stored separately.
+2. A large teacher model solves each prompt, then rewrites its scratch work into clean reasoning
+   and a final answer; both are stored separately.
 3. The final answer is checked where possible. Critical reviewers judge correctness and general
    quality; focused checks separately flag repeated steps, circular checking, stalled progress,
    unresolved branches, reasoning-limit stops, and missing or malformed final answers.
@@ -33,8 +32,8 @@ Prepare the reusable source pools once. Supplied solutions are preserved separat
 uv run synthetic-sft build-pools configs/source-pools.yaml
 ```
 
-Build the image, then submit a run. The example draws a deterministic 1,000-prompt mixture with 50% of each
-difficulty-aware source allocated to its hard band:
+Build the image, then submit a run. The example draws a deterministic 1,000-prompt mixture with
+50% of each difficulty-aware source allocated to its hard band:
 
 ```bash
 ./container/build.sh "$SCRATCH/images/synthetic-sft-v0.4.sqsh"
@@ -62,8 +61,8 @@ Each run is written under `output_dir/run_id`:
 
 SFT rows contain `sample_id`, `candidate_id`, `system_prompt`, `user_prompt`, `reasoning`, `response`,
 `reasoning_num_tokens`, `response_num_tokens`, `answer_json`, `correctness_verdict`, `source`, `model`,
-`quality_score`, `quality_details_json`,
-`hygiene_status`, `correctness_only_eligible`, `productivity_filtered_eligible`,
+`quality_score`, `quality_details_json`, `hygiene_status`, `correctness_only_eligible`,
+`productivity_filtered_eligible`,
 `exclusion_reasons_json`, and `provenance_json`.
 
 The Parquet datasets can be queried directly:
