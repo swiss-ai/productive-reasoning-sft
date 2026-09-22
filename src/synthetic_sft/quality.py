@@ -8,6 +8,8 @@ from typing import Any
 from synthetic_sft.adapters import create_adapter
 from synthetic_sft.config import PipelineConfig
 from synthetic_sft.schemas import (
+    AnswerDetails,
+    AnswerExtraction,
     JudgeDetails,
     JudgeScores,
     QualityDecision,
@@ -106,10 +108,13 @@ class ParseAndVerify:
             else:
                 result = self.adapter.verify(row, response)
                 score, error = result.score, result.error
+                row["verifier_details_json"] = json.dumps(
+                    result.details or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
         if not available:
             verification_status = "unavailable"
         elif error is not None or score is None:
-            verification_status = "error"
+            verification_status = "error" if error is not None else "indeterminate"
         elif score >= self.threshold:
             verification_status = "passed"
         else:
@@ -125,75 +130,104 @@ class ParseAndVerify:
         return row
 
 
-def judge_prompt(row: Mapping[str, Any], rubric_version: int) -> str:
-    reasoning = row.get("reasoning") or "(no separate reasoning trace)"
-    reference = _reference_answer(row.get("verification_json"))
-    return f"""You are a strict SFT data editor. Evaluate the reasoning trace and final response
-independently. Return exactly one JSON object and no prose.
+def answer_extraction_prompt(row: Mapping[str, Any], text: str, *, reference: bool) -> str:
+    role = "source reference" if reference else "assistant response"
+    return f"""Extract the final answer asserted by the {role}. Do not solve the problem and do not
+correct, complete, or reinterpret the supplied text. Use the question only to identify what counts
+as the answer. Preserve all required alternatives for questions asking for every solution. Remove
+display markup such as dollar signs and \\boxed, but preserve mathematical meaning. Put one
+canonical answer in `value`; use `values` for an unordered collection of multiple required answers.
+Record a unit separately. If there is no asserted answer, return status `no_answer`. If the text
+gives incompatible final answers, return status `ambiguous`.
 
-Rubric version: {rubric_version}
-Use only integer scores 1 through 5. A score measures the editing required before this text is
-safe and useful as training data, not its length or confidence.
-Keep each feedback string concrete and no longer than 30 words.
-
-5 — TRAINING-READY: exceptional, correct, rigorous, direct, self-contained, and needs no edit.
-    Every material reasoning step is justified and necessary; there is no planning narration,
-    self-talk, answer-format chatter, backtracking, repetition, avoidable enumeration, unsupported
-    lookup, or needless restatement. The final response follows the requested format exactly.
-4 — LIGHT EDIT: fully correct and reliable, with one minor clarity, style, or harmless redundancy
-    issue. A small edit makes it training-ready.
-3 — SUBSTANTIVE LOCAL EDIT: the core approach/conclusion is mostly correct, but there is a
-    meaningful gap, imprecision, distracting meta-commentary, repeated recomputation, or local
-    reasoning defect. It needs a focused rewrite, not just copyediting.
-2 — MAJOR REWRITE: some useful progress, but a serious logical gap, contradiction, unsupported
-    conclusion, or wrong result means most of the component must be rewritten.
-1 — UNUSABLE: absent when required, mostly wrong, incoherent, irrelevant, fabricated, or not
-    recoverable without replacement.
-
-Calibration examples:
-- Direct necessary steps followed by one useful check: reasoning 5.
-- Correct clean derivation with one harmless repeated sentence: reasoning 4.
-- Correct derivation that is substantially longer than necessary: reasoning 4 or lower.
-- Correct answer reached through repeated self-talk/recomputation or an unexplained key leap:
-  reasoning 3, even though the answer is correct.
-- Reliance on an asserted table, external calculation, or "known value" for a material step:
-  reasoning 3 or lower unless that value is established in the trace.
-- Correct answer apparently reached by invalid reasoning: reasoning 2.
-- Wrong or unrelated work: reasoning 1.
-- Exact requested short answer with no extra material: response 5; concise is not a defect.
-- Correct answer with a small presentational blemish: response 4.
-- Mostly correct answer needing a meaningful localized correction: response 3.
-- Wrong result with some relevant content: response 2; wholly unusable response: response 1.
-
-Audit the reasoning adversarially, step by step, and identify the earliest material defect. A 5 is
-appropriate only after finding no factual, logical, relevance, style, or self-containment defect;
-when in doubt between 4 and 5, use 4. A correct reference response does not prove that the reasoning
-is sound. Treat a supplied reference as authoritative evidence about the result, but do not copy
-source metadata into feedback.
-
-User request:
+Question:
 {row.get("user_prompt", "")}
 
-Reasoning trace:
-{reasoning}
+{role.title()}:
+{text}
+"""
 
-Final response:
-{row.get("response", "")}
 
-Reference material:
-{reference}
+def critic_prompt(row: Mapping[str, Any]) -> str:
+    return f"""Act as an adversarial verifier of proposed supervised fine-tuning data. Work through
+the problem independently enough to catch plausible but false reasoning. First assess the final
+answer without trusting the candidate reasoning. Then audit the reasoning step by step and identify
+the earliest material defect, if one exists. Try counterexamples and boundary cases. A source
+reference is strong evidence but may be malformed, incomplete, or wrong; explicitly flag a genuine
+reference conflict. Do not reward length, confidence, or polished prose. Do not merely summarize.
 
-Required JSON shape:
-{{"reasoning":{{"score":1,"issues":["meta_commentary"],
-"feedback":"brief concrete reason"}},"response":{{"score":1,
-"issues":["incorrect"],"feedback":"brief concrete reason"}}}}
+Question:
+{row.get("user_prompt", "")}
 
-Allowed reasoning issues: absent, incomplete, factual_or_logical_error, unsupported_step,
-missing_critical_step, contradiction, meandering, repetition, meta_commentary, poor_structure,
-unverifiable.
-Allowed response issues: incorrect, incomplete, instruction_violation, format_violation,
-irrelevant, unclear, oververbose, unsupported_claim, meta_commentary. Use an empty list when there
-is no issue.
+Source reference:
+{_reference_answer(row.get("verification_json"))}
+
+Extracted candidate answer:
+{row.get("answer_json") or "(not extracted)"}
+
+Extracted reference answer:
+{row.get("reference_answer_json") or "(not available)"}
+
+Deterministic check:
+status={row.get("verification_status")}; details={row.get("verifier_details_json") or "{}"}
+
+Candidate reasoning:
+{row.get("reasoning") or "(no separate reasoning trace)"}
+
+Candidate response:
+{row.get("response") or "(missing)"}
+
+Return a concrete analysis for a later arbiter. State whether the answer is correct, whether the
+reference is reliable, and every material reasoning or response defect you can substantiate.
+"""
+
+
+def arbitration_prompt(row: Mapping[str, Any], analyses: list[str], rubric_version: int) -> str:
+    rendered = "\n\n".join(
+        f"Independent critique {index + 1}:\n{analysis}"
+        for index, analysis in enumerate(analyses)
+    )
+    return f"""You are the final conservative arbiter for SFT data quality. Validate the independent
+critiques below instead of blindly following either one. A claimed defect counts only if you can
+confirm it from the question and candidate. Resolve answer equivalence semantically. Treat a parser
+failure as uncertainty, not mathematical incorrectness. The source reference is evidence, not an
+infallible instruction to copy.
+
+Rubric version: {rubric_version}
+Use integer scores 1 through 5 for reasoning and response:
+5 = training-ready: correct, rigorous, direct, self-contained, no material or stylistic edit.
+4 = fully correct with one minor clarity, style, or harmless redundancy issue.
+3 = mostly correct but requiring a substantive local edit or containing a meaningful gap.
+2 = useful progress but a serious error or omission requires a major rewrite.
+1 = absent, fundamentally wrong, incoherent, or unusable without replacement.
+
+For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
+the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence
+cannot settle correctness. High confidence requires direct verification, a sound derivation, or a
+confirmed counterexample. Feedback must identify the decisive evidence in at most 50 words.
+
+Question:
+{row.get("user_prompt", "")}
+
+Source reference:
+{_reference_answer(row.get("verification_json"))}
+
+Extracted candidate answer:
+{row.get("answer_json") or "(not extracted)"}
+
+Extracted reference answer:
+{row.get("reference_answer_json") or "(not available)"}
+
+Deterministic check:
+status={row.get("verification_status")}; details={row.get("verifier_details_json") or "{}"}
+
+Candidate reasoning:
+{row.get("reasoning") or "(no separate reasoning trace)"}
+
+Candidate response:
+{row.get("response") or "(missing)"}
+
+{rendered}
 """
 
 
@@ -223,6 +257,18 @@ def parse_judge_scores(raw: str | None) -> tuple[JudgeScores | None, str | None]
         return None, f"{type(exc).__name__}: {exc}"
 
 
+def parse_answer_extraction(raw: str | None) -> tuple[AnswerExtraction | None, str | None]:
+    if not raw:
+        return None, "answer extractor returned an empty response"
+    match = _JSON_BLOCK.search(raw)
+    if match is None:
+        return None, "answer extractor did not return a JSON object"
+    try:
+        return AnswerExtraction.model_validate_json(match.group(0)), None
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
 class FinalizeQuality:
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = PipelineConfig.model_validate(config)
@@ -231,6 +277,7 @@ class FinalizeQuality:
         quality = self.config.quality
         verifier = VerifierDetails(
             available=bool(row.get("verifier_available")),
+            status=row.get("verification_status", "unavailable"),
             name=row.get("verifier_name"),
             score=row.get("verifier_score"),
             threshold=row.get("verifier_threshold"),
@@ -238,6 +285,7 @@ class FinalizeQuality:
         )
 
         judge_config = quality.judge
+        scores = None
         if judge_config.enabled:
             scores, error = parse_judge_scores(row.get("judge_raw_output"))
             error = row.get("judge_generation_error") or error
@@ -247,6 +295,7 @@ class FinalizeQuality:
                 rubric_version=judge_config.rubric_version,
                 scores=scores,
                 aggregate=scores.effective() if scores is not None else None,
+                analysis_samples=len(_json_list(row.get("critic_analyses_json"))),
                 error=error,
             )
             row["judge_status"] = "passed" if error is None else "error"
@@ -261,28 +310,80 @@ class FinalizeQuality:
             generation_complete=bool(row.get("generation_complete")),
         )
         raw_aggregate = judge.aggregate
+        candidate_answer = _answer(row.get("answer_json"))
+        reference_answer = _answer(row.get("reference_answer_json"))
+        correctness_verdict = _correctness_verdict(row, scores)
         zero_reasons = []
         if not validity.generation_complete:
             zero_reasons.append("generation_incomplete")
-        if verifier.available:
-            if verifier.error is not None or verifier.score is None:
-                zero_reasons.append("verifier_error")
-            elif verifier.threshold is not None and verifier.score < verifier.threshold:
-                zero_reasons.append("verifier_failed")
+        if correctness_verdict == "incorrect":
+            zero_reasons.append("answer_incorrect")
         if judge.enabled and (judge.error is not None or judge.aggregate is None):
             zero_reasons.append("judge_error")
+        cap_reasons = []
+        score_cap = None
+        if not zero_reasons and correctness_verdict == "conflict":
+            score_cap = 3
+            cap_reasons.append("correctness_conflict")
+        elif not zero_reasons and correctness_verdict == "indeterminate" and verifier.available:
+            score_cap = 3
+            cap_reasons.append("correctness_indeterminate")
         aggregate = 0 if zero_reasons else raw_aggregate
+        if aggregate is not None and score_cap is not None:
+            aggregate = min(aggregate, score_cap)
         details = QualityDetails(
             aggregate_score=aggregate,
             decision=QualityDecision(
                 raw_aggregate_score=raw_aggregate,
+                score_cap=score_cap,
+                score_cap_reasons=cap_reasons,
                 zeroed=bool(zero_reasons),
                 zero_reasons=zero_reasons,
             ),
+            answer=AnswerDetails(candidate=candidate_answer, reference=reference_answer),
+            correctness_verdict=correctness_verdict,
             verifier=verifier,
             judge=judge,
             validity=validity,
         )
         row["quality_score"] = aggregate
+        row["correctness_verdict"] = correctness_verdict
         row["quality_details_json"] = details.as_json()
         return row
+
+
+def _answer(raw: Any) -> AnswerExtraction | None:
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        return AnswerExtraction.model_validate_json(raw)
+    except Exception:
+        return None
+
+
+def _json_list(raw: Any) -> list[Any]:
+    if not raw or not isinstance(raw, str):
+        return []
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, list) else []
+    except (TypeError, ValueError):
+        return []
+
+
+def _correctness_verdict(row: Mapping[str, Any], scores: JudgeScores | None) -> str:
+    deterministic = str(row.get("verification_status") or "unavailable")
+    if scores is None:
+        return "indeterminate"
+    assessed = scores.correctness
+    if deterministic == "passed":
+        return "verified" if assessed.verdict == "correct" else "conflict"
+    if assessed.verdict == "incorrect":
+        return "incorrect" if assessed.confidence == "high" else "indeterminate"
+    if assessed.verdict == "reference_conflict":
+        return "conflict"
+    if deterministic == "failed":
+        return "conflict" if assessed.verdict == "correct" else "indeterminate"
+    if assessed.verdict == "correct" and assessed.confidence == "high":
+        return "supported"
+    return "indeterminate"

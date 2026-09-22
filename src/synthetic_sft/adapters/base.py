@@ -12,6 +12,7 @@ from synthetic_sft.schemas import SeedRecord
 class VerificationResult:
     score: float | None
     error: str | None = None
+    details: dict[str, Any] | None = None
 
 
 class SourceAdapter(ABC):

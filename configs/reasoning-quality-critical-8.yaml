@@ -1,12 +1,12 @@
 run:
-  run_id: reasoning-pilot-1000-v4
+  run_id: reasoning-quality-critical-8-v1
   output_dir: ../runs
   seed: 42
   resume: true
 
 source:
   adapter: pool
-  num_samples: 1000
+  num_samples: 8
   system_prompt: null
   params:
     sources:
@@ -52,7 +52,7 @@ model:
     max_tokens: 16384
     presence_penalty: 0.0
     repetition_penalty: 1.0
-    reasoning_effort: xhigh
+    reasoning_effort: medium
 
 generation:
   rollouts_per_prompt: 1
@@ -64,7 +64,7 @@ quality:
   judge:
     enabled: true
     model_source: null
-    batch_size: 16
+    batch_size: 8
     max_tokens: 768
     analysis_samples: 2
     analysis_max_tokens: 2048
@@ -74,7 +74,7 @@ quality:
 output:
   parquet_target_mb: 64
   compression: zstd
-  prepared_shards_per_gpu: 4
+  prepared_shards_per_gpu: 1
 
 slurm:
   nodes: 1

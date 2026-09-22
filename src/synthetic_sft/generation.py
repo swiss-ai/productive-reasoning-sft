@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pandas as pd
 
 from synthetic_sft.config import PipelineConfig
-from synthetic_sft.json_utils import stable_id
-from synthetic_sft.quality import FinalizeQuality, ParseAndVerify, judge_prompt
-from synthetic_sft.schemas import JudgeScores
+from synthetic_sft.json_utils import canonical_json, stable_id
+from synthetic_sft.quality import (
+    FinalizeQuality,
+    ParseAndVerify,
+    answer_extraction_prompt,
+    arbitration_prompt,
+    critic_prompt,
+    parse_answer_extraction,
+)
+from synthetic_sft.schemas import AnswerExtraction, JudgeScores
 
 
 class FanOutCandidates:
@@ -55,7 +63,7 @@ class VLLMBatchPredictor:
         self.config = PipelineConfig.model_validate(config)
         self.judge = judge
         self.fused_judge = not judge and can_fuse_judge(self.config)
-        if self.fused_judge:
+        if self.fused_judge or judge:
             self._parse_and_verify = ParseAndVerify(
                 self.config.source.adapter,
                 self.config.source.params,
@@ -88,33 +96,27 @@ class VLLMBatchPredictor:
         if frame.empty:
             return frame
         records = frame.to_dict(orient="records")
+        if self.judge:
+            self._quality(records)
+            return pd.DataFrame.from_records(records)
         messages = [self._messages(row) for row in records]
-        sampling = [
-            self._sampling(row, phase="judge" if self.judge else "draft") for row in records
-        ]
-        template_kwargs = (
-            {"enable_thinking": False}
-            if self.judge
-            else {
-                "enable_thinking": True,
-                "reasoning_effort": self.config.model.sampling.reasoning_effort,
-            }
+        sampling = [self._sampling(row, phase="draft") for row in records]
+        template_kwargs = {
+            "enable_thinking": True,
+            "reasoning_effort": self.config.model.sampling.reasoning_effort,
+        }
+        results = self._chat(
+            records, messages, sampling, template_kwargs, phase="generation"
         )
-        phase = "judge" if self.judge else "generation"
-        results = self._chat(records, messages, sampling, template_kwargs, phase=phase)
         for row, output in results:
             candidate = output.outputs[0]
-            if self.judge:
-                row["judge_raw_output"] = candidate.text
-            else:
-                row["draft_generation"] = candidate.text
-                row["draft_finish_reason"] = candidate.finish_reason
-                row["draft_num_input_tokens"] = len(output.prompt_token_ids or [])
-                row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
-        if not self.judge:
-            self._polish(records)
-            if self.fused_judge:
-                self._verify_and_judge(records)
+            row["draft_generation"] = candidate.text
+            row["draft_finish_reason"] = candidate.finish_reason
+            row["draft_num_input_tokens"] = len(output.prompt_token_ids or [])
+            row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
+        self._polish(records)
+        if self.fused_judge:
+            self._quality(records)
         return pd.DataFrame.from_records(records)
 
     def _chat(self, records, messages, sampling, template_kwargs, *, phase: str):
@@ -138,7 +140,11 @@ class VLLMBatchPredictor:
                     )[0]
                     results.append((row, output))
                 except Exception as exc:
-                    prefix = "judge_generation" if phase == "judge" else "generation"
+                    prefix = (
+                        "judge_generation"
+                        if phase in {"answer_extraction", "critique", "arbitration"}
+                        else "generation"
+                    )
                     row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
                     row[f"batch_{prefix}_error"] = f"{type(batch_error).__name__}: {batch_error}"
             return results
@@ -168,47 +174,149 @@ class VLLMBatchPredictor:
             row["num_input_tokens"] = len(output.prompt_token_ids or [])
             row["num_generated_tokens"] = len(candidate.token_ids or [])
 
-    def _verify_and_judge(self, records: list[dict[str, Any]]) -> None:
+    def _quality(self, records: list[dict[str, Any]]) -> None:
         for row in records:
             self._parse_and_verify(row)
-        messages = [self._judge_messages(row) for row in records]
-        sampling = [self._sampling(row, phase="judge") for row in records]
+        self._extract_answers(records)
+        # Structured extraction makes heterogeneous source answers safe for deterministic
+        # comparison. Native source checkers may also use the extracted answer as a candidate.
+        for row in records:
+            self._parse_and_verify(row)
+        self._run_critiques(records)
+        self._arbitrate(records)
+        for row in records:
+            self._finalize_quality(row)
+
+    def _extract_answers(self, records: list[dict[str, Any]]) -> None:
+        requests: list[dict[str, Any]] = []
+        messages = []
+        sampling = []
+        for index, row in enumerate(records):
+            response = str(row.get("response") or "")
+            request = {
+                "candidate_id": f"{row['candidate_id']}:answer:candidate",
+                "row_index": index,
+                "target": "candidate",
+            }
+            requests.append(request)
+            prompt = answer_extraction_prompt(row, response, reference=False)
+            messages.append([{"role": "user", "content": self._fit_prompt(prompt, 512)}])
+            sampling.append(self._structured_sampling(request, AnswerExtraction, 512, "answer"))
+            reference = _reference_text(row.get("verification_json"))
+            if reference is not None:
+                request = {
+                    "candidate_id": f"{row['candidate_id']}:answer:reference",
+                    "row_index": index,
+                    "target": "reference",
+                }
+                requests.append(request)
+                prompt = answer_extraction_prompt(row, reference, reference=True)
+                messages.append([{"role": "user", "content": self._fit_prompt(prompt, 512)}])
+                sampling.append(
+                    self._structured_sampling(request, AnswerExtraction, 512, "reference")
+                )
+        results = self._chat(
+            requests,
+            messages,
+            sampling,
+            {"enable_thinking": False},
+            phase="answer_extraction",
+        )
+        seen: set[tuple[int, str]] = set()
+        for request, output in results:
+            index, target = int(request["row_index"]), str(request["target"])
+            raw = output.outputs[0].text
+            extracted, error = parse_answer_extraction(raw)
+            records[index][f"{target}_answer_raw_output"] = raw
+            if extracted is not None:
+                field = "answer_json" if target == "candidate" else "reference_answer_json"
+                records[index][field] = canonical_json(extracted.model_dump(mode="json"))
+            if error is not None:
+                records[index][f"{target}_answer_error"] = error
+            seen.add((index, target))
+        for request in requests:
+            key = (int(request["row_index"]), str(request["target"]))
+            if key not in seen:
+                records[key[0]][f"{key[1]}_answer_error"] = request.get(
+                    "judge_generation_error", "answer extraction failed"
+                )
+
+    def _run_critiques(self, records: list[dict[str, Any]]) -> None:
+        requests: list[dict[str, Any]] = []
+        messages = []
+        sampling = []
+        judge = self.config.quality.judge
+        for index, row in enumerate(records):
+            prompt = self._fit_prompt(critic_prompt(row), judge.analysis_max_tokens)
+            for sample_index in range(judge.analysis_samples):
+                request = {
+                    "candidate_id": f"{row['candidate_id']}:critique:{sample_index}",
+                    "row_index": index,
+                    "sample_index": sample_index,
+                }
+                requests.append(request)
+                messages.append([{"role": "user", "content": prompt}])
+                sampling.append(
+                    self._sampling_type(
+                        temperature=0.3,
+                        top_p=0.95,
+                        max_tokens=judge.analysis_max_tokens,
+                        seed=_candidate_seed(str(request["candidate_id"]), suffix="critic"),
+                    )
+                )
+        results = self._chat(
+            requests,
+            messages,
+            sampling,
+            {
+                "enable_thinking": True,
+                "reasoning_effort": judge.reasoning_effort,
+            },
+            phase="critique",
+        )
+        analyses: list[list[tuple[int, str]]] = [[] for _ in records]
+        for request, output in results:
+            analyses[int(request["row_index"])].append(
+                (int(request["sample_index"]), output.outputs[0].text)
+            )
+        for index, values in enumerate(analyses):
+            ordered = [text for _, text in sorted(values)]
+            records[index]["critic_analyses_json"] = canonical_json(ordered)
+            if len(ordered) != judge.analysis_samples:
+                records[index]["judge_generation_error"] = (
+                    f"received {len(ordered)} of {judge.analysis_samples} critical analyses"
+                )
+
+    def _arbitrate(self, records: list[dict[str, Any]]) -> None:
+        messages = []
+        sampling = []
+        judge = self.config.quality.judge
+        for row in records:
+            analyses = _json_string_list(row.get("critic_analyses_json"))
+            prompt = arbitration_prompt(row, analyses, judge.rubric_version)
+            messages.append(
+                [{"role": "user", "content": self._fit_prompt(prompt, judge.max_tokens)}]
+            )
+            sampling.append(self._structured_sampling(row, JudgeScores, judge.max_tokens, "judge"))
         results = self._chat(
             records,
             messages,
             sampling,
             {"enable_thinking": False},
-            phase="judge",
+            phase="arbitration",
         )
         for row, output in results:
             row["judge_raw_output"] = output.outputs[0].text
-        for row in records:
-            self._finalize_quality(row)
 
     def _messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
-        if self.judge:
-            return [
-                {
-                    "role": "user",
-                    "content": judge_prompt(row, self.config.quality.judge.rubric_version),
-                }
-            ]
         messages = []
         if row.get("system_prompt"):
             messages.append({"role": "system", "content": str(row["system_prompt"])})
         messages.append({"role": "user", "content": str(row["user_prompt"])})
         return messages
 
-    def _judge_messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
-        return [
-            {
-                "role": "user",
-                "content": judge_prompt(row, self.config.quality.judge.rubric_version),
-            }
-        ]
-
     def _polish_messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
-        prompt = f"""Rewrite scratch work into expert-quality supervised fine-tuning data.
+        prefix = f"""Rewrite scratch work into expert-quality supervised fine-tuning data.
 
 Solve and check the problem yourself. Use the scratch work only when it is sound; discard it when
 it is long, confused, or contradictory. Independently establish every claim from the user request;
@@ -233,20 +341,44 @@ User request:
 {row.get("user_prompt", "")}
 
 Scratch work:
-{row.get("draft_generation", "")}
 """
+        output_tokens = self.config.generation.polish_max_tokens
+        reserve = self.config.model.max_model_len - output_tokens - self._token_count(prefix) - 256
+        scratch = self._truncate_text(str(row.get("draft_generation") or ""), max(0, reserve))
+        prompt = f"{prefix}{scratch}"
         return [{"role": "user", "content": prompt}]
 
+    def _structured_sampling(self, row, schema, max_tokens: int, suffix: str):
+        return self._sampling_type(
+            temperature=0.0,
+            max_tokens=max_tokens,
+            seed=_candidate_seed(str(row["candidate_id"]), suffix=suffix),
+            structured_outputs=self._structured_outputs_type(json=schema.model_json_schema()),
+        )
+
+    def _token_count(self, text: str) -> int:
+        return len(self.llm.get_tokenizer().encode(text, add_special_tokens=False))
+
+    def _truncate_text(self, text: str, max_tokens: int) -> str:
+        if max_tokens <= 0:
+            return ""
+        tokenizer = self.llm.get_tokenizer()
+        token_ids = tokenizer.encode(text, add_special_tokens=False)
+        if len(token_ids) <= max_tokens:
+            return text
+        marker = "\n\n[content truncated to fit model context]\n\n"
+        marker_ids = tokenizer.encode(marker, add_special_tokens=False)
+        keep = max(0, max_tokens - len(marker_ids))
+        left = keep * 2 // 5
+        right = keep - left
+        tail = tokenizer.decode(token_ids[-right:]) if right else ""
+        return tokenizer.decode(token_ids[:left]) + marker + tail
+
+    def _fit_prompt(self, prompt: str, output_tokens: int) -> str:
+        budget = max(1, self.config.model.max_model_len - output_tokens - 256)
+        return self._truncate_text(prompt, budget)
+
     def _sampling(self, row: dict[str, Any], *, phase: str):
-        if phase == "judge":
-            return self._sampling_type(
-                temperature=0.0,
-                max_tokens=self.config.quality.judge.max_tokens,
-                seed=_candidate_seed(str(row["candidate_id"]), suffix="judge"),
-                structured_outputs=self._structured_outputs_type(
-                    json=JudgeScores.model_json_schema()
-                ),
-            )
         if phase == "polish":
             return self._sampling_type(
                 temperature=0.0,
@@ -288,3 +420,24 @@ def can_fuse_judge(config: PipelineConfig) -> bool:
 
 def _candidate_seed(candidate_id: str, *, suffix: str) -> int:
     return int(stable_id(candidate_id, suffix)[:8], 16)
+
+
+def _reference_text(raw: Any) -> str | None:
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        payload = json.loads(raw)
+        answer = (payload.get("entry") or {}).get("answer")
+        return None if answer is None else str(answer)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _json_string_list(raw: Any) -> list[str]:
+    if not raw or not isinstance(raw, str):
+        return []
+    try:
+        value = json.loads(raw)
+        return [str(item) for item in value] if isinstance(value, list) else []
+    except (TypeError, ValueError):
+        return []

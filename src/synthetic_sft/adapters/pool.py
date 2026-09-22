@@ -86,17 +86,139 @@ class PoolAdapter(SourceAdapter):
             answer = verification.get("entry", {}).get("answer")
             if answer is None or str(answer).strip() == "":
                 return VerificationResult(score=None)
-            from math_verify import parse, verify
-
-            # Ray invokes this from an actor thread. math-verify's default timeout uses
-            # signal.alarm(), which is only legal in Python's main thread.
-            gold = parse(str(answer), parsing_timeout=None)
-            candidate = parse(response, parsing_timeout=None)
+            candidate = _extracted_answer(record.get("answer_json"))
+            reference = _extracted_answer(record.get("reference_answer_json"))
+            if candidate is None or reference is None:
+                return VerificationResult(
+                    score=None,
+                    details={"reason": "structured_answer_unavailable"},
+                )
+            result = _verify_extracted(reference, candidate)
+            if result is not None:
+                return result
             return VerificationResult(
-                score=1.0 if verify(gold, candidate, timeout_seconds=None) else 0.0
+                score=None,
+                details={
+                    "reason": "answer_type_requires_model_review",
+                    "candidate_type": candidate.get("answer_type"),
+                    "reference_type": reference.get("answer_type"),
+                },
             )
         except Exception as exc:
             return VerificationResult(score=None, error=f"{type(exc).__name__}: {exc}")
+
+
+def _extracted_answer(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, str) or not raw:
+        return None
+    value = json.loads(raw)
+    if not isinstance(value, dict) or value.get("status") != "extracted":
+        return None
+    return value
+
+
+def _verify_extracted(
+    reference: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> VerificationResult | None:
+    exact_types = {"boolean", "choice"}
+    reference_type = str(reference.get("answer_type"))
+    candidate_type = str(candidate.get("answer_type"))
+    if reference_type in exact_types and candidate_type in exact_types:
+        gold = _normalized_text(str(reference.get("value") or ""))
+        predicted = _normalized_text(str(candidate.get("value") or ""))
+        return VerificationResult(
+            score=1.0 if gold == predicted else 0.0,
+            details={"method": "normalized_exact", "gold": gold, "candidate": predicted},
+        )
+
+    math_types = {"number", "expression", "equation", "set", "interval"}
+    if reference_type not in math_types or candidate_type not in math_types:
+        return None
+    reference_unit = _normalized_text(str(reference.get("unit") or ""))
+    candidate_unit = _normalized_text(str(candidate.get("unit") or ""))
+    if reference_unit and not candidate_unit:
+        return VerificationResult(score=None, details={"reason": "candidate_unit_missing"})
+    if reference_unit and reference_unit != candidate_unit:
+        return VerificationResult(
+            score=0.0,
+            details={
+                "method": "typed_math",
+                "reason": "unit_mismatch",
+                "gold_unit": reference_unit,
+                "candidate_unit": candidate_unit,
+            },
+        )
+    gold_items = _answer_items(reference)
+    candidate_items = _answer_items(candidate)
+    if not gold_items or not candidate_items:
+        return VerificationResult(score=None, details={"reason": "empty_math_answer"})
+    if len(gold_items) != len(candidate_items):
+        return VerificationResult(
+            score=0.0,
+            details={
+                "method": "typed_math",
+                "reason": "different_answer_count",
+                "gold_count": len(gold_items),
+                "candidate_count": len(candidate_items),
+            },
+        )
+
+    from math_verify import parse, verify
+    from math_verify.parser import ExprExtractionConfig, LatexExtractionConfig
+
+    extraction = (LatexExtractionConfig(boxed_match_priority=0), ExprExtractionConfig())
+
+    def parsed(value: str):
+        # Both sides are extractor-produced answer spans, never arbitrary prose. A display
+        # environment gives LaTeX unambiguous boundaries while ExprExtractionConfig covers
+        # plain values such as 0.99.
+        return parse(
+            f"\\[\\boxed{{{value}}}\\]",
+            extraction_config=extraction,
+            parsing_timeout=None,
+        )
+
+    remaining = [parsed(item) for item in candidate_items]
+    if any(not item for item in remaining):
+        return VerificationResult(score=None, details={"reason": "candidate_parse_failed"})
+    for gold_text in gold_items:
+        gold = parsed(gold_text)
+        if not gold:
+            return VerificationResult(score=None, details={"reason": "reference_parse_failed"})
+        match = next(
+            (
+                index
+                for index, predicted in enumerate(remaining)
+                if verify(gold, predicted, timeout_seconds=None)
+            ),
+            None,
+        )
+        if match is None:
+            return VerificationResult(
+                score=0.0,
+                details={
+                    "method": "typed_math",
+                    "gold": gold_items,
+                    "candidate": candidate_items,
+                },
+            )
+        remaining.pop(match)
+    return VerificationResult(
+        score=1.0,
+        details={"method": "typed_math", "gold": gold_items, "candidate": candidate_items},
+    )
+
+
+def _answer_items(answer: Mapping[str, Any]) -> list[str]:
+    values = answer.get("values")
+    if isinstance(values, list) and values:
+        return [str(value).strip() for value in values if str(value).strip()]
+    value = str(answer.get("value") or "").strip()
+    return [value] if value else []
+
+
+def _normalized_text(value: str) -> str:
+    return " ".join(value.casefold().strip().rstrip(".").split())
 
 
 def _sample_source(

@@ -34,6 +34,7 @@ class SeedRecord(StrictModel):
 
 class VerifierDetails(StrictModel):
     available: bool
+    status: Literal["passed", "failed", "indeterminate", "error", "unavailable"]
     name: str | None = None
     score: float | None = Field(default=None, ge=0.0, le=1.0)
     threshold: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -46,6 +47,47 @@ class VerifierDetails(StrictModel):
         ):
             raise ValueError("unavailable verifier must not contain verifier data")
         return self
+
+
+AnswerType = Literal[
+    "number",
+    "expression",
+    "equation",
+    "set",
+    "interval",
+    "boolean",
+    "choice",
+    "text",
+    "code",
+    "proof",
+    "other",
+]
+
+
+class AnswerExtraction(StrictModel):
+    status: Literal["extracted", "no_answer", "ambiguous"]
+    answer_type: AnswerType | None = None
+    value: str | None = None
+    values: list[str] = Field(default_factory=list)
+    unit: str | None = None
+    evidence: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def extracted_answer_has_value(self) -> AnswerExtraction:
+        if self.status == "extracted" and not (self.value or self.values):
+            raise ValueError("an extracted answer requires value or values")
+        return self
+
+
+class AnswerDetails(StrictModel):
+    candidate: AnswerExtraction | None = None
+    reference: AnswerExtraction | None = None
+
+
+class CorrectnessAssessment(StrictModel):
+    verdict: Literal["correct", "incorrect", "indeterminate", "reference_conflict"]
+    confidence: Literal["high", "medium", "low"]
+    feedback: str = Field(min_length=1, max_length=500)
 
 
 ReasoningIssue = Literal[
@@ -87,6 +129,7 @@ class ResponseAssessment(StrictModel):
 
 
 class JudgeScores(StrictModel):
+    correctness: CorrectnessAssessment
     reasoning: ReasoningAssessment
     response: ResponseAssessment
 
@@ -101,6 +144,7 @@ class JudgeDetails(StrictModel):
     rubric_version: int | None = Field(default=None, ge=1)
     scores: JudgeScores | None = None
     aggregate: int | None = Field(default=None, ge=1, le=5)
+    analysis_samples: int = Field(default=0, ge=0)
     error: str | None = None
 
     @model_validator(mode="after")
@@ -113,6 +157,7 @@ class JudgeDetails(StrictModel):
                     self.rubric_version,
                     self.scores,
                     self.aggregate,
+                    self.analysis_samples or None,
                     self.error,
                 )
             ):
@@ -138,14 +183,17 @@ class ValidityDetails(StrictModel):
 
 QualityZeroReason = Literal[
     "generation_incomplete",
-    "verifier_failed",
-    "verifier_error",
+    "answer_incorrect",
     "judge_error",
 ]
 
 
 class QualityDecision(StrictModel):
     raw_aggregate_score: int | None = Field(default=None, ge=1, le=5)
+    score_cap: int | None = Field(default=None, ge=1, le=5)
+    score_cap_reasons: list[Literal["correctness_conflict", "correctness_indeterminate"]] = Field(
+        default_factory=list
+    )
     zeroed: bool
     zero_reasons: list[QualityZeroReason] = Field(default_factory=list)
 
@@ -157,9 +205,13 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
+    answer: AnswerDetails
+    correctness_verdict: Literal[
+        "verified", "supported", "incorrect", "conflict", "indeterminate"
+    ]
     verifier: VerifierDetails
     judge: JudgeDetails
     validity: ValidityDetails
@@ -169,8 +221,12 @@ class QualityDetails(StrictModel):
         if self.decision.zeroed:
             if self.aggregate_score != 0.0:
                 raise ValueError("zeroed quality must have aggregate_score 0")
-        elif self.aggregate_score != self.decision.raw_aggregate_score:
-            raise ValueError("nonzeroed aggregate must equal raw_aggregate_score")
+        else:
+            expected = self.decision.raw_aggregate_score
+            if expected is not None and self.decision.score_cap is not None:
+                expected = min(expected, self.decision.score_cap)
+            if self.aggregate_score != expected:
+                raise ValueError("aggregate must equal the raw score after applying its cap")
         return self
 
     def as_json(self) -> str:

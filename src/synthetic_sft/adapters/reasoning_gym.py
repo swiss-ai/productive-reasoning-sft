@@ -127,11 +127,19 @@ class ReasoningGymAdapter(SourceAdapter):
         try:
             verification = json.loads(str(payload))
             scorer = get_score_answer_fn(verification["source_dataset"])
+            extracted = _extracted_candidates(record.get("answer_json"))
+            candidates = extracted or _answer_candidates(response)
             score = max(
                 float(scorer(candidate, verification["entry"]))
-                for candidate in _answer_candidates(response)
+                for candidate in candidates
             )
-            return VerificationResult(score=min(1.0, max(0.0, score)))
+            return VerificationResult(
+                score=min(1.0, max(0.0, score)),
+                details={
+                    "method": "reasoning_gym_native",
+                    "candidate_source": "structured_answer" if extracted else "response_fallback",
+                },
+            )
         except Exception as exc:  # A broken source scorer must not lose the generated row.
             return VerificationResult(score=None, error=f"{type(exc).__name__}: {exc}")
 
@@ -167,3 +175,21 @@ def _answer_candidates(response: str) -> list[str]:
             except ValueError:
                 pass
     return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def _extracted_candidates(raw: Any) -> list[str]:
+    if not isinstance(raw, str) or not raw:
+        return []
+    try:
+        answer = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(answer, dict) or answer.get("status") != "extracted":
+        return []
+    values = answer.get("values")
+    candidates = [str(answer.get("value") or "").strip()]
+    if isinstance(values, list):
+        candidates.extend(str(value).strip() for value in values)
+        if values:
+            candidates.append(" ".join(str(value).strip() for value in values))
+    return [candidate for candidate in candidates if candidate]
