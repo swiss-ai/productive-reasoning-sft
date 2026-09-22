@@ -1,5 +1,5 @@
 run:
-  run_id: reasoning-pilot-1000-v1
+  run_id: reasoning-pilot-1000-v2
   output_dir: ../runs
   seed: 42
   resume: true
