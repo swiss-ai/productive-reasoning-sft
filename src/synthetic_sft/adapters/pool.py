@@ -88,9 +88,13 @@ class PoolAdapter(SourceAdapter):
                 return VerificationResult(score=None)
             from math_verify import parse, verify
 
-            gold = parse(str(answer))
-            candidate = parse(response)
-            return VerificationResult(score=1.0 if verify(gold, candidate) else 0.0)
+            # Ray invokes this from an actor thread. math-verify's default timeout uses
+            # signal.alarm(), which is only legal in Python's main thread.
+            gold = parse(str(answer), parsing_timeout=None)
+            candidate = parse(response, parsing_timeout=None)
+            return VerificationResult(
+                score=1.0 if verify(gold, candidate, timeout_seconds=None) else 0.0
+            )
         except Exception as exc:
             return VerificationResult(score=None, error=f"{type(exc).__name__}: {exc}")
 
@@ -143,6 +147,8 @@ def _sample_source(
             serial += 1
             heap = heaps[band]
             capacity = capacities[band]
+            if capacity == 0:
+                continue
             if len(heap) < capacity:
                 heapq.heappush(heap, item)
             elif rank < -heap[0][0]:

@@ -28,6 +28,16 @@ class FanOutCandidates:
         ]
 
 
+class ExcludeCandidateIds:
+    """Skip candidates already durably written by an interrupted generation stage."""
+
+    def __init__(self, candidate_ids: set[str]) -> None:
+        self.candidate_ids = candidate_ids
+
+    def __call__(self, row: dict[str, Any]) -> bool:
+        return str(row["candidate_id"]) not in self.candidate_ids
+
+
 class VLLMBatchPredictor:
     """One long-lived vLLM engine actor processing Ray Data batches."""
 

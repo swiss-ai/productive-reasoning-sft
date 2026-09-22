@@ -8,7 +8,12 @@ import yaml
 
 from synthetic_sft.cluster import RayCluster, available_gpu_replicas
 from synthetic_sft.config import PipelineConfig
-from synthetic_sft.generation import FanOutCandidates, build_vllm_processor, can_fuse_judge
+from synthetic_sft.generation import (
+    ExcludeCandidateIds,
+    FanOutCandidates,
+    build_vllm_processor,
+    can_fuse_judge,
+)
 from synthetic_sft.prepare import prepare_source
 from synthetic_sft.quality import FinalizeQuality, ParseAndVerify
 from synthetic_sft.schemas import quality_details_schema
@@ -48,7 +53,19 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
         generated_path = config.run_dir / "intermediate" / "generated"
         if not _stage_complete(config, "generated"):
             stage_started = time.time()
-            _rotate_incomplete(generated_path)
+            if config.run.resume:
+                completed_ids = _candidate_ids(generated_path)
+            else:
+                _rotate_incomplete(generated_path)
+                completed_ids = set()
+            expected_candidates = (
+                config.source.num_samples * config.generation.rollouts_per_prompt
+            )
+            if len(completed_ids) > expected_candidates:
+                raise RuntimeError(
+                    f"generated stage has {len(completed_ids)} unique candidates, "
+                    f"but only {expected_candidates} were expected"
+                )
             dataset = ray.data.read_parquet(str(seeds), override_num_blocks=inference_blocks)
             dataset = dataset.flat_map(
                 FanOutCandidates(
@@ -57,9 +74,21 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                     config.model.model_source,
                 )
             )
-            dataset = dataset.repartition(inference_blocks, shuffle=False)
-            generated = build_vllm_processor(config, judge=False, concurrency=replicas)(dataset)
-            generated.write_parquet(str(generated_path), compression=config.output.compression)
+            remaining = expected_candidates - len(completed_ids)
+            if remaining:
+                if completed_ids:
+                    dataset = dataset.filter(ExcludeCandidateIds(completed_ids))
+                dataset = dataset.repartition(inference_blocks, shuffle=False)
+                generated = build_vllm_processor(config, judge=False, concurrency=replicas)(dataset)
+                generated.write_parquet(
+                    str(generated_path), compression=config.output.compression, mode="append"
+                )
+            written_ids = _candidate_ids(generated_path)
+            if len(written_ids) != expected_candidates:
+                raise RuntimeError(
+                    f"generated stage wrote {len(written_ids)} unique candidates, "
+                    f"expected {expected_candidates}"
+                )
             _mark_stage(config, "generated", generated_path, stage_started)
 
         candidates_path = config.run_dir / "candidates"
@@ -70,7 +99,18 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                 str(generated_path), override_num_blocks=inference_blocks
             )
             candidates = candidates.repartition(inference_blocks, shuffle=False)
-            if not can_fuse_judge(config):
+            if can_fuse_judge(config):
+                # Recompute cheap derived fields so verifier/parser fixes also apply to
+                # rows preserved from an earlier interrupted attempt.
+                candidates = candidates.map(
+                    ParseAndVerify(
+                        config.source.adapter,
+                        config.source.params,
+                        config.quality.verifier_threshold,
+                    )
+                )
+                candidates = candidates.map(FinalizeQuality(config.model_dump(mode="json")))
+            else:
                 candidates = candidates.map(
                     ParseAndVerify(
                         config.source.adapter,
@@ -141,6 +181,20 @@ def _rotate_incomplete(path: Path) -> None:
     if path.exists():
         path.rename(path.with_name(f"{path.name}.incomplete.{time.time_ns()}"))
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _candidate_ids(path: Path) -> set[str]:
+    if not path.exists() or not any(path.rglob("*.parquet")):
+        return set()
+    import pyarrow.dataset as pads
+
+    dataset = pads.dataset(str(path), format="parquet", exclude_invalid_files=True)
+    if "candidate_id" not in dataset.schema.names:
+        raise RuntimeError(f"generated output has no candidate_id column: {path}")
+    result: set[str] = set()
+    for batch in dataset.scanner(columns=["candidate_id"], batch_size=100_000).to_batches():
+        result.update(map(str, batch.column(0).to_pylist()))
+    return result
 
 
 def _write_run_metadata(config: PipelineConfig) -> None:
