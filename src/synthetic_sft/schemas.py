@@ -65,7 +65,7 @@ AnswerType = Literal[
 
 
 class AnswerExtraction(StrictModel):
-    status: Literal["extracted", "no_answer", "ambiguous"]
+    status: Literal["extracted", "conditional", "no_answer", "ambiguous"]
     answer_type: AnswerType
     value: str | None = None
     values: list[str] = Field(default_factory=list)
@@ -76,6 +76,10 @@ class AnswerExtraction(StrictModel):
     def extracted_answer_has_value(self) -> AnswerExtraction:
         if self.status == "extracted" and not (self.value or self.values):
             raise ValueError("an extracted answer requires value or values")
+        if self.status == "conditional" and (
+            self.answer_type != "text" or not self.value or self.values
+        ):
+            raise ValueError("a conditional answer needs one text value and no values list")
         return self
 
 
@@ -284,7 +288,7 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[6] = 6
+    schema_version: Literal[7] = 7
     aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
     answer: AnswerDetails

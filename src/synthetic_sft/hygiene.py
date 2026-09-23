@@ -86,7 +86,7 @@ Reasoning trace:
 Final response (for context only):
 {row.get("response") or "(missing)"}
 
-Repeated-span signal (not a verdict):
+Targeted signal (not a verdict):
 {signal or "(none detected)"}
 """
 
@@ -239,6 +239,25 @@ def repeated_span_signal(reasoning: str) -> tuple[str, int, float, int] | None:
     return excerpt, length, coverage, count
 
 
+def repeated_numeric_result_signal(reasoning: str) -> str | None:
+    """Point a semantic judge to a repeatedly revisited precise result, not a verdict."""
+    positions: dict[str, list[int]] = {}
+    for match in re.finditer(r"(?<![\w.])[-+]?\d+\.\d{9,}", reasoning):
+        integer, decimals = match.group().split(".", 1)
+        key = f"{integer}.{decimals[:9]}"
+        positions.setdefault(key, []).append(match.start())
+    repeated = [(value, sites) for value, sites in positions.items() if len(sites) >= 4]
+    if not repeated:
+        return None
+    value, sites = max(repeated, key=lambda item: (len(item[1]), item[1][-1] - item[1][0]))
+    total = max(1, len(reasoning))
+    return (
+        f"The precise result beginning {value} appears {len(sites)} times, from about "
+        f"{sites[0] / total:.0%} to {sites[-1] / total:.0%} of the trace. Check whether "
+        "later recomputations resolve uncertainty or merely reconfirm a settled value."
+    )
+
+
 def _deterministic_findings(row: Mapping[str, Any]) -> list[HygieneFinding]:
     findings: list[HygieneFinding] = []
     reasoning = str(row.get("reasoning") or "")
@@ -292,6 +311,11 @@ def _deterministic_findings(row: Mapping[str, Any]) -> list[HygieneFinding]:
         )
     elif answer_status == "extracted":
         verdict, explanation = "clear", "A separate, extractable final answer is present."
+    elif answer_status == "conditional":
+        verdict, explanation = (
+            "clear",
+            "A conditional final answer is present; its conditions are checked separately.",
+        )
     else:
         verdict, explanation = (
             "uncertain",

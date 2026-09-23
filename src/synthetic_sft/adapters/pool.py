@@ -134,6 +134,11 @@ def _verify_extracted(
     math_types = {"number", "expression", "equation", "set", "interval"}
     if reference_type not in math_types or candidate_type not in math_types:
         return None
+    if {reference_type, candidate_type} == {"equation", "expression"}:
+        return VerificationResult(
+            score=None,
+            details={"reason": "mixed_equation_expression_requires_model_review"},
+        )
     reference_unit = _normalized_text(str(reference.get("unit") or ""))
     candidate_unit = _normalized_text(str(candidate.get("unit") or ""))
     if reference_unit and not candidate_unit:

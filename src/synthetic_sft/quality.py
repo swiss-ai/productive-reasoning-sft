@@ -162,10 +162,12 @@ canonical answer in `value`; use `values` for an unordered collection of multipl
 Equivalent exact, parameterized, and numerical forms of the same answer are not incompatible:
 extract the most precise form. An intermediate expression is not a second final answer.
 If the response gives different answers for explicitly different domains or interpretations,
-that is ONE conditional answer: use `text` with a concise `value` preserving each condition.
-Do not call it ambiguous merely because it contains several numbers. Two incompatible claims
-under the SAME conditions are ambiguous. Do not decide whether the conditions are justified;
-the correctness judge handles that separately.
+return status `conditional`, type `text`, and one concise `value` preserving each condition.
+Example: "no maximum for unrestricted reals; 3^15 if all variables are nonnegative".
+Do not call this ambiguous merely because it contains several numbers. Two incompatible claims
+under the SAME conditions are `ambiguous`. Do not decide whether the conditions are justified;
+the correctness judge handles that separately. An implicit and explicit form of the same solution
+are `extracted`, not `conditional` or `ambiguous`.
 Record a unit separately. Always choose exactly one `answer_type`: use `number` for a numeric
 scalar, `expression` for a symbolic value, `equation`, `set`, `interval`, `boolean`, `choice`,
 `text`, `code`, or `proof` when applicable, and `other` only when none fits. If there is no asserted
@@ -190,6 +192,8 @@ reference conflict. Do not reward length, confidence, or polished prose. Do not 
 Read the question literally before considering likely intended variants. A surprising, trivial,
 or poorly worded condition is still the stated condition. If the candidate primarily solves a
 different repaired question, that is a material defect even when it also notes the literal answer.
+An explicitly conditional answer to a genuinely unspecified domain can be useful; an extra answer
+obtained by replacing a stated quantity with a different quantity is irrelevant speculation.
 Do not claim to have verified arithmetic, substitutions, or cases that you did not actually check;
 identify the specific check or leave it unverified.
 For proof questions, distinguish a correct yes/no conclusion from an actually established proof.
@@ -245,7 +249,11 @@ If the literal question is coherent, grade its literal answer first. Do not repl
 surprising, or awkward condition with the more interesting condition you think the author meant.
 If the candidate leads with an answer to that repaired problem, it is not training-ready even if a
 later caveat contains the literal answer. A reference for the repaired problem is not a reason to
-prefer it. Never say a calculation or case was independently verified unless you checked it.
+prefer it. Distinguish a genuinely unspecified domain (where a clearly conditional answer can be
+complete) from changing a stated fact, such as replacing angles with side lengths. A speculative
+answer to the changed facts is irrelevant even if labeled hypothetical: response score at most 3
+with `irrelevant` or `unsupported_claim`. Never say a calculation or case was independently
+verified unless you checked it.
 
 Rubric version: {rubric_version}
 Use integer scores 1 through 5 for reasoning and response:
@@ -416,7 +424,7 @@ class FinalizeQuality:
             validity.generation_complete
             and correctness_verdict in {"verified", "supported"}
             and candidate_answer is not None
-            and candidate_answer.status == "extracted"
+            and candidate_answer.status in {"extracted", "conditional"}
             and judge.error is None
         )
         exclusion_reasons = []
@@ -424,7 +432,7 @@ class FinalizeQuality:
             exclusion_reasons.append("generation_incomplete")
         if correctness_verdict not in {"verified", "supported"}:
             exclusion_reasons.append(f"correctness_{correctness_verdict}")
-        if candidate_answer is None or candidate_answer.status != "extracted":
+        if candidate_answer is None or candidate_answer.status not in {"extracted", "conditional"}:
             exclusion_reasons.append("final_answer_unavailable")
         if judge.error is not None:
             exclusion_reasons.append("judge_error")

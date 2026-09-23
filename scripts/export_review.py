@@ -122,7 +122,7 @@ def _joined(values: list[str]) -> str:
 
 
 def _answer(value: dict | None) -> str:
-    if not value or value.get("status") != "extracted":
+    if not value or value.get("status") not in {"extracted", "conditional"}:
         return "unavailable"
     return str(value.get("value") or value.get("values") or "unavailable")
 

@@ -10,6 +10,7 @@ from synthetic_sft.hygiene import (
     SEMANTIC_CATEGORIES,
     hygiene_prompt,
     parse_hygiene_assessment,
+    repeated_numeric_result_signal,
     repeated_span_signal,
 )
 from synthetic_sft.json_utils import canonical_json, stable_id
@@ -209,8 +210,10 @@ class VLLMBatchPredictor:
         sampling = []
         max_tokens = self.config.quality.judge.hygiene_max_tokens
         for index, row in enumerate(records):
-            signal = repeated_span_signal(str(row.get("reasoning") or ""))
+            reasoning = str(row.get("reasoning") or "")
+            signal = repeated_span_signal(reasoning)
             signal_text = signal[0][:500] if signal is not None else ""
+            numeric_signal = repeated_numeric_result_signal(reasoning)
             for category in SEMANTIC_CATEGORIES:
                 request = {
                     "candidate_id": f"{row['candidate_id']}:hygiene:{category}",
@@ -218,7 +221,13 @@ class VLLMBatchPredictor:
                     "category": category,
                 }
                 prompt = hygiene_prompt(
-                    row, category, signal_text if category == "repetition" else ""
+                    row,
+                    category,
+                    signal_text
+                    if category == "repetition"
+                    else numeric_signal
+                    if category in {"circular_rechecking", "no_new_progress"}
+                    else "",
                 )
                 fitted = self._fit_prompt(prompt, max_tokens)
                 request["prompt_truncated"] = fitted != prompt
