@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__REVIEW_TITLE__</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18242b;
+      --muted: #5d6a70;
+      --paper: #f4f5f1;
+      --card: #fff;
+      --line: #dce2de;
+      --green: #0d766a;
+      --green-soft: #e1f2ec;
+      --red: #a0392e;
+      --red-soft: #fbe9e4;
+      --amber: #805b10;
+      --amber-soft: #fff2cf;
+      --blue: #17384a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .top { background: var(--blue); color: #f6faf8; padding: 22px 28px 20px; }
+    .top-inner { max-width: 1680px; margin: auto; display: flex; align-items: end; justify-content: space-between; gap: 22px; }
+    .eyebrow { color: #a8d4cb; font-size: 11px; letter-spacing: .13em; text-transform: uppercase; font-weight: 800; }
+    h1 { font-size: clamp(24px, 3vw, 36px); margin: 5px 0 7px; letter-spacing: -.04em; line-height: 1.1; }
+    .subtitle { color: #c9d6d4; margin: 0; font-size: 13px; max-width: 670px; }
+    .stats { display: flex; gap: 9px; flex-wrap: wrap; justify-content: end; }
+    .stat { min-width: 92px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); padding: 10px 13px; border-radius: 11px; }
+    .stat strong { display: block; font-size: 23px; line-height: 1; }
+    .stat span { color: #d4e2dd; font-size: 11px; }
+    .workspace { max-width: 1680px; margin: auto; padding: 18px 20px 30px; display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 18px; min-height: calc(100vh - 125px); }
+    .rail, .detail { background: var(--card); border: 1px solid var(--line); border-radius: 15px; box-shadow: 0 4px 24px rgba(15,35,30,.045); }
+    .rail { align-self: start; position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+    .controls { padding: 15px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+    .search, .source-filter { width: 100%; border: 1px solid var(--line); background: #fafbf9; border-radius: 9px; padding: 10px 11px; outline-color: var(--green); font-size: 13px; }
+    .segments { display: flex; gap: 5px; background: #edf1ee; padding: 4px; border-radius: 9px; }
+    .segments button { border: 0; border-radius: 7px; background: transparent; color: var(--muted); padding: 7px 8px; font-size: 12px; font-weight: 700; flex: 1; }
+    .segments button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 5px rgba(0,0,0,.1); }
+    .list-meta { color: var(--muted); font-size: 11px; padding: 9px 16px 5px; }
+    .candidate-list { overflow: auto; padding: 5px 8px 12px; }
+    .candidate { width: 100%; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 11px 10px; margin: 2px 0; color: inherit; }
+    .candidate:hover { background: #f6f8f5; }
+    .candidate.active { background: #edf5f1; border-color: #b8d9cd; }
+    .candidate-top, .candidate-bottom { display: flex; justify-content: space-between; align-items: center; gap: 7px; }
+    .candidate-source { font-size: 11px; font-weight: 700; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .candidate-question { font-size: 12.5px; line-height: 1.45; margin: 6px 0 8px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+    .candidate-bottom { color: var(--muted); font-size: 10px; font-family: ui-monospace, monospace; }
+    .badge { display: inline-flex; align-items: center; border-radius: 100px; padding: 4px 8px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .badge.pass { background: var(--green-soft); color: var(--green); }
+    .badge.reject { background: var(--red-soft); color: var(--red); }
+    .badge.warn { background: var(--amber-soft); color: var(--amber); }
+    .badge.neutral { background: #ebf0ee; color: #45565d; }
+    .detail { min-width: 0; overflow: hidden; }
+    .detail-header { padding: 22px 26px 17px; border-bottom: 1px solid var(--line); }
+    .detail-header h2 { font-size: 22px; letter-spacing: -.025em; margin: 8px 0 11px; }
+    .idline { color: var(--muted); font: 11px ui-monospace, monospace; word-break: break-all; }
+    .badge-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .detail-body { padding: 23px 26px 45px; max-width: 1100px; }
+    .notice { border-left: 4px solid var(--green); background: var(--green-soft); border-radius: 7px; padding: 13px 15px; margin-bottom: 23px; font-size: 13px; line-height: 1.55; }
+    .notice.reject { border-left-color: var(--red); background: var(--red-soft); }
+    .notice strong { display: block; margin-bottom: 5px; }
+    .notice .reasons { color: var(--muted); }
+    .human-note { border-left: 4px solid var(--blue); background: #eaf1f4; border-radius: 7px; padding: 14px 16px; margin-bottom: 12px; line-height: 1.55; font-size: 13px; }
+    .human-note strong { display: block; color: var(--blue); margin-bottom: 5px; }
+    section { margin: 0 0 27px; }
+    section h3 { display: flex; align-items: center; gap: 9px; font-size: 13px; color: #43545b; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 11px; }
+    .text-block { background: #f9faf8; border: 1px solid var(--line); border-radius: 10px; padding: 17px 18px; line-height: 1.65; font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-family: inherit; }
+    .text-block.answer { background: #eff7f3; border-color: #cce5d8; }
+    .feedback-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 11px; }
+    .feedback { border: 1px solid var(--line); border-radius: 10px; padding: 13px 15px; background: #fbfcfa; min-width: 0; }
+    .feedback h4 { font-size: 12px; margin: 0 0 7px; }
+    .feedback p { font-size: 12.5px; line-height: 1.55; margin: 0; overflow-wrap: anywhere; }
+    .feedback small { color: var(--muted); display: block; margin-top: 8px; }
+    .finding { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+    .finding strong { font-size: 12px; }
+    .finding p { margin: 7px 0 0; font-size: 12.5px; line-height: 1.55; }
+    .finding code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; background: #f4f5f2; padding: 7px 9px; margin-top: 7px; border-radius: 5px; font-size: 11px; }
+    .kv { display: grid; grid-template-columns: 180px minmax(0,1fr); gap: 8px 14px; font-size: 12.5px; }
+    .kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+    details { border: 1px solid var(--line); border-radius: 9px; margin: 10px 0; background: #fbfcfa; }
+    summary { cursor: pointer; padding: 12px 15px; font-weight: 700; font-size: 12px; }
+    details .text-block { border: 0; border-top: 1px solid var(--line); border-radius: 0 0 9px 9px; }
+    .empty { color: var(--muted); padding: 18px; font-size: 13px; }
+    :focus-visible { outline: 3px solid #ecb656; outline-offset: 2px; }
+    @media (max-width: 920px) { .top-inner { align-items: start; flex-direction: column; } .stats { justify-content: start; } .workspace { grid-template-columns: 1fr; } .rail { position: relative; top: auto; max-height: 330px; } .feedback-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .top { padding: 19px; } .workspace { padding: 10px; } .detail-header, .detail-body { padding-left: 17px; padding-right: 17px; } .kv { grid-template-columns: 1fr; gap: 2px; } .kv dd { margin-bottom: 8px; } }
+  </style>
+</head>
+<body>
+  <header class="top"><div class="top-inner">
+    <div><div class="eyebrow">Productive reasoning · evidence gallery</div><h1>__REVIEW_TITLE__</h1><p class="subtitle">__REVIEW_SUBTITLE__</p></div>
+    <div class="stats" id="stats"></div>
+  </div></header>
+  <div class="workspace">
+    <aside class="rail" aria-label="Candidate browser">
+      <div class="controls">
+        <input id="search" class="search" type="search" placeholder="Search question, source or ID" aria-label="Search candidates">
+        <div class="segments" role="group" aria-label="Selection filter">
+          <button type="button" data-filter="all" class="active">All</button>
+          <button type="button" data-filter="pass">Passed</button>
+          <button type="button" data-filter="reject">Rejected</button>
+        </div>
+        <select id="source" class="source-filter" aria-label="Filter by source"><option value="">All sources</option></select>
+      </div>
+      <div class="list-meta" id="list-meta"></div>
+      <div class="candidate-list" id="candidate-list"></div>
+    </aside>
+    <main class="detail" id="detail" aria-live="polite"><div class="empty">Choose a candidate to inspect its reasoning and verification.</div></main>
+  </div>
+  <script id="review-data" type="application/json">__REVIEW_DATA__</script>
+  <script>
+    const rows = JSON.parse(document.getElementById('review-data').textContent);
+    const state = {filter: 'all', query: '', source: '', id: rows[0]?.candidate_id || null};
+    const $ = id => document.getElementById(id);
+    const node = (tag, className, value) => {
+      const item = document.createElement(tag);
+      if (className) item.className = className;
+      if (value !== undefined && value !== null) item.textContent = String(value);
+      return item;
+    };
+    const add = (parent, tag, className, value) => {
+      const item = node(tag, className, value); parent.appendChild(item); return item;
+    };
+    const badge = (text, kind='neutral') => node('span', `badge ${kind}`, text);
+    const display = value => value === null || value === undefined || value === '' ? '—' : String(value);
+    const pretty = value => JSON.stringify(value ?? {}, null, 2);
+
+    function init() {
+      const selected = rows.filter(row => row.selected).length;
+      for (const [value, label] of [[rows.length, 'shown'], [selected, 'passed'], [rows.length - selected, 'rejected']]) {
+        const stat = add($('stats'), 'div', 'stat');
+        add(stat, 'strong', '', value); add(stat, 'span', '', label);
+      }
+      for (const source of [...new Set(rows.map(row => row.source))].sort()) {
+        const option = add($('source'), 'option', '', source); option.value = source;
+      }
+      $('search').addEventListener('input', event => { state.query = event.target.value.toLowerCase(); renderList(); });
+      $('source').addEventListener('change', event => { state.source = event.target.value; renderList(); });
+      document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => {
+        state.filter = button.dataset.filter;
+        document.querySelectorAll('[data-filter]').forEach(item => item.classList.toggle('active', item === button));
+        renderList();
+      }));
+      renderList(); renderDetail();
+    }
+
+    function filteredRows() {
+      return rows.filter(row => {
+        if (state.filter === 'pass' && !row.selected) return false;
+        if (state.filter === 'reject' && row.selected) return false;
+        if (state.source && row.source !== state.source) return false;
+        if (state.query && !`${row.sample_id} ${row.candidate_id} ${row.source} ${row.question}`.toLowerCase().includes(state.query)) return false;
+        return true;
+      });
+    }
+
+    function renderList() {
+      const list = $('candidate-list'); list.replaceChildren();
+      const visible = filteredRows();
+      $('list-meta').textContent = `${visible.length} of ${rows.length} candidates · click to inspect`;
+      if (!visible.length) add(list, 'div', 'empty', 'No candidates match these filters.');
+      for (const row of visible) {
+        const card = add(list, 'button', `candidate ${row.candidate_id === state.id ? 'active' : ''}`);
+        card.type = 'button'; card.addEventListener('click', () => { state.id = row.candidate_id; renderList(); renderDetail(); });
+        const top = add(card, 'div', 'candidate-top');
+        add(top, 'span', 'candidate-source', row.source);
+        top.appendChild(badge(`score ${display(row.score)}`, row.selected ? 'pass' : 'reject'));
+        add(card, 'div', 'candidate-question', row.annotation?.label || row.question || '(missing question)');
+        const bottom = add(card, 'div', 'candidate-bottom');
+        add(bottom, 'span', '', row.sample_id.slice(0, 12));
+        add(bottom, 'span', '', row.selected ? 'PASSED' : 'REJECTED');
+      }
+    }
+
+    function section(parent, heading, value, className='') {
+      const part = add(parent, 'section', ''); add(part, 'h3', '', heading);
+      add(part, 'div', `text-block ${className}`, display(value)); return part;
+    }
+    function detailBox(parent, heading, value) {
+      const details = add(parent, 'details', ''); add(details, 'summary', '', heading);
+      add(details, 'div', 'text-block', display(value)); return details;
+    }
+    function keyValue(parent, entries) {
+      const dl = add(parent, 'dl', 'kv');
+      for (const [key, value] of entries) { add(dl, 'dt', '', key); add(dl, 'dd', '', display(value)); }
+    }
+
+    function renderDetail() {
+      const row = rows.find(item => item.candidate_id === state.id);
+      const detail = $('detail'); detail.replaceChildren();
+      if (!row) { add(detail, 'div', 'empty', 'Choose a candidate to inspect.'); return; }
+      const quality = row.quality || {};
+      const header = add(detail, 'div', 'detail-header');
+      add(header, 'div', 'idline', `${row.sample_id} · candidate ${row.candidate_id}`);
+      add(header, 'h2', '', row.annotation?.label || row.source);
+      const badges = add(header, 'div', 'badge-row');
+      badges.appendChild(badge(row.selected ? 'Passed productivity filter' : 'Rejected by productivity filter', row.selected ? 'pass' : 'reject'));
+      badges.appendChild(badge(`quality ${display(row.score)} / 5`, row.selected ? 'pass' : 'warn'));
+      badges.appendChild(badge(`correctness: ${display(row.correctness)}`));
+      badges.appendChild(badge(`hygiene: ${display(row.hygiene_status)}`, row.hygiene_status === 'passed' ? 'pass' : 'warn'));
+      const body = add(detail, 'div', 'detail-body');
+      if (row.annotation?.note) {
+        const human = add(body, 'div', 'human-note');
+        add(human, 'strong', '', 'Human review');
+        add(human, 'div', '', row.annotation.note);
+      }
+      const notice = add(body, 'div', `notice ${row.selected ? '' : 'reject'}`);
+      add(notice, 'strong', '', row.selected ? 'Pipeline verdict · passed' : 'Pipeline verdict · rejected');
+      add(notice, 'div', 'reasons', row.selected ? 'Complete, sufficiently supported, and above the strict quality threshold under this policy.' : (row.exclusion_reasons.length ? row.exclusion_reasons.join(' · ') : 'See the quality and verification details below.'));
+      section(body, 'Question', row.question);
+      if (row.annotation?.excerpt) section(body, 'Passage to inspect', row.annotation.excerpt);
+      section(body, 'Final response', row.response, 'answer');
+
+      const hygieneSection = add(body, 'section', ''); add(hygieneSection, 'h3', '', 'Focused hygiene checks');
+      const findings = quality.hygiene?.findings || [];
+      const salient = findings.filter(item => item.verdict !== 'clear');
+      if (!salient.length) add(hygieneSection, 'div', 'empty', 'No hygiene defect found by the focused checks.');
+      for (const finding of salient) {
+        const item = add(hygieneSection, 'div', 'finding');
+        const line = add(item, 'div', 'badge-row');
+        add(line, 'strong', '', finding.category.replaceAll('_', ' '));
+        line.appendChild(badge(finding.verdict, finding.verdict === 'defect' ? 'reject' : 'warn'));
+        add(item, 'p', '', finding.explanation);
+        for (const excerpt of finding.evidence || []) add(item, 'code', '', excerpt);
+        if (finding.error) add(item, 'p', '', `Check error: ${finding.error}`);
+      }
+      detailBox(hygieneSection, `All ${findings.length} focused checks`, findings.map(item => `${item.category}: ${item.verdict}\n${item.explanation}\n${(item.evidence || []).join('\n')}`).join('\n\n'));
+
+      const scores = quality.judge?.scores || {};
+      const judgeSection = add(body, 'section', ''); add(judgeSection, 'h3', '', 'Judge review');
+      const feedback = add(judgeSection, 'div', 'feedback-grid');
+      for (const [label, part] of [['Correctness', scores.correctness], ['Reasoning', scores.reasoning], ['Response', scores.response]]) {
+        const box = add(feedback, 'div', 'feedback'); add(box, 'h4', '', label);
+        add(box, 'p', '', part?.feedback || quality.judge?.error || 'No parsed judgment.');
+        add(box, 'small', '', label === 'Correctness' ? `Verdict: ${display(part?.verdict)} · confidence: ${display(part?.confidence)}` : `Score: ${display(part?.score)} · issues: ${(part?.issues || []).join(', ') || 'none'}`);
+      }
+
+      const verifySection = add(body, 'section', ''); add(verifySection, 'h3', '', 'Verification and decision');
+      keyValue(verifySection, [
+        ['Source check', `${display(row.verification_status)} · ${display(row.verifier_name)}`],
+        ['Check details', pretty(row.verifier_details)],
+        ['Extracted answer', pretty(quality.answer?.candidate)],
+        ['Source answer', pretty(quality.answer?.reference)],
+        ['Correctness-only eligible', row.correctness_only ? 'yes' : 'no'],
+        ['Reasoning / response tokens', `${display(row.reasoning_tokens)} / ${display(row.response_tokens)}`],
+        ['Finish reason', row.finish_reason],
+        ['Judge rubric / retries', `${display(quality.judge?.rubric_version)} / ${display(quality.judge?.retries ?? 0)}`],
+        ['Judge error', quality.judge?.error || 'none'],
+      ]);
+      const trace = add(body, 'section', ''); add(trace, 'h3', '', 'Full trajectory');
+      detailBox(trace, 'Open full reasoning trace', row.reasoning);
+      const extras = add(body, 'section', ''); add(extras, 'h3', '', 'Original and provenance');
+      detailBox(extras, 'Raw teacher draft', row.draft);
+      detailBox(extras, 'Independent critiques', (row.critics || []).map((value, index) => `Critique ${index + 1}\n\n${value}`).join('\n\n──────────\n\n'));
+      detailBox(extras, 'Provenance JSON', pretty(row.provenance));
+      if (row.system_prompt) detailBox(extras, 'System prompt', row.system_prompt);
+      window.scrollTo({top: 0, behavior: 'instant'});
+    }
+    init();
+  </script>
+</body>
+</html>
