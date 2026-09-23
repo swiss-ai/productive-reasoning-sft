@@ -13,6 +13,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("candidates", type=Path)
     parser.add_argument("output_dir", type=Path)
+    parser.add_argument("--label", default="saved candidate snapshot")
     args = parser.parse_args()
 
     rows = ds.dataset(str(args.candidates), format="parquet").to_table().to_pylist()
@@ -21,19 +22,19 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for name, group in (("selected", selected), ("rejected", rejected)):
         path = args.output_dir / f"{name}.md"
-        path.write_text(_render(name, group, len(rows)), encoding="utf-8")
+        path.write_text(_render(name, group, len(rows), args.label), encoding="utf-8")
         print(f"{path}: {len(group)} rows")
 
 
-def _render(name: str, rows: list[dict], total: int) -> str:
+def _render(name: str, rows: list[dict], total: int, label: str) -> str:
     heading = (
-        "Selected by the pilot policy" if name == "selected" else "Rejected by the pilot policy"
+        "Selected by the strict policy" if name == "selected" else "Rejected by the strict policy"
     )
     lines = [
         f"# {heading}",
         "",
-        f"{len(rows)} of {total} retained rollouts. Labels are not human approval. "
-        "This is the historical v2 pilot; later fixes are not applied here.",
+        f"{len(rows)} of {total} retained rollouts from {label}. "
+        "Machine decisions are not human approval; saved reasoning and responses are unchanged.",
         "",
     ]
     ordered = sorted(
@@ -58,6 +59,7 @@ def _render(name: str, rows: list[dict], total: int) -> str:
                 f"correctness: {row.get('correctness_verdict')}",
                 f"- Source verifier: {row.get('verification_status')}; "
                 f"hygiene: {row.get('hygiene_status')}",
+                f"- Verifier details: `{row.get('verifier_details_json') or '{}'}`",
                 f"- Reasoning tokens: {row.get('reasoning_num_tokens')}; "
                 f"response tokens: {row.get('response_num_tokens')}",
                 f"- Finish: {row.get('finish_reason')}",
@@ -67,6 +69,9 @@ def _render(name: str, rows: list[dict], total: int) -> str:
                 f"- Judge scores: reasoning {reasoning.get('score', '—')}, "
                 f"response {response.get('score', '—')}",
                 f"- Judge correctness: {correctness.get('verdict', '—')}",
+                f"- Judge rubric: {quality['judge'].get('rubric_version')}; "
+                f"retries: {quality['judge'].get('retries', 0)}; "
+                f"error: {quality['judge'].get('error') or 'none'}",
                 f"- Extracted answer: {_answer(quality['answer'].get('candidate'))}; "
                 f"source answer: {_answer(quality['answer'].get('reference'))}",
                 "",
