@@ -392,8 +392,6 @@ class FinalizeQuality:
             zero_reasons.append("answer_incorrect")
         if judge.enabled and (judge.error is not None or judge.aggregate is None):
             zero_reasons.append("judge_error")
-        if hygiene.errors and judge.enabled and "judge_error" not in zero_reasons:
-            zero_reasons.append("judge_error")
         cap_reasons = []
         score_cap = None
         if not zero_reasons and correctness_verdict == "conflict":
@@ -428,8 +426,10 @@ class FinalizeQuality:
             exclusion_reasons.append(f"correctness_{correctness_verdict}")
         if candidate_answer is None or candidate_answer.status != "extracted":
             exclusion_reasons.append("final_answer_unavailable")
-        if judge.error is not None or hygiene.errors:
+        if judge.error is not None:
             exclusion_reasons.append("judge_error")
+        if hygiene.errors:
+            exclusion_reasons.append("hygiene_error")
         if aggregate is None or aggregate < 4:
             exclusion_reasons.append("quality_below_4")
         if hygiene.status != "passed":

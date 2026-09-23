@@ -10,6 +10,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+import yaml
+from calibrate_hygiene import _load_cases
 
 from synthetic_sft.config import load_config
 from synthetic_sft.generation import VLLMBatchPredictor
@@ -20,6 +22,7 @@ def main() -> None:
     parser.add_argument("config", type=Path)
     parser.add_argument("source_candidates", type=Path)
     parser.add_argument("output_dir", type=Path)
+    parser.add_argument("hygiene_cases", nargs="?", default="")
     args = parser.parse_args()
 
     output_path = args.output_dir / "candidates.parquet"
@@ -67,6 +70,29 @@ def main() -> None:
     (args.output_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if args.hygiene_cases:
+        cases = yaml.safe_load(Path(args.hygiene_cases).read_text(encoding="utf-8"))["cases"]
+        case_rows = _load_cases(cases)
+        predictor._run_hygiene(case_rows)
+        hygiene_review = [
+            {
+                "id": case["id"],
+                "expected": case.get("expected") or {},
+                "observed": {
+                    finding["category"]: finding["verdict"]
+                    for finding in json.loads(row["hygiene_findings_json"])
+                    if finding["category"] in (case.get("expected") or {})
+                },
+                "findings": json.loads(row["hygiene_findings_json"]),
+                "raw_outputs": json.loads(row["hygiene_raw_outputs_json"]),
+            }
+            for case, row in zip(cases, case_rows, strict=True)
+        ]
+        (args.output_dir / "hygiene_calibration.json").write_text(
+            json.dumps(hygiene_review, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"focused calibration: {len(hygiene_review)} real traces")
     print(json.dumps({key: value for key, value in summary.items() if key != "changes"}))
     print(f"{len(summary['changes'])} score or selection changes; {output_path}")
 

@@ -41,7 +41,8 @@ _FOCUS = {
     ),
     "unresolved_branch": (
         "Find a material contradiction that the trace leaves unresolved, or a conclusion that "
-        "relies on a branch the trace explicitly abandoned or left incomplete. An explicitly "
+        "relies on a branch the trace explicitly says it abandoned or left incomplete. Invoking "
+        "an unproved theorem is a proof-quality issue, not an abandoned branch. An explicitly "
         "corrected mistake is not a defect. Lack of proof, suspected arithmetic errors, and "
         "answer correctness belong to the separate correctness review. Do not invent a "
         "letter-count or constraint mismatch. If there are no exact incompatible statements "
@@ -71,7 +72,10 @@ one contiguous substring of the supplied trace; do not join nonadjacent snippets
 paraphrase. If you cannot quote the evidence exactly, return `uncertain`, not `defect`.
 Return `clear` if you inspected the trace and found no such failure. Return `uncertain` if the
 available text cannot settle it. Never invent a quotation or claim to have inspected omitted text.
-The response must be only the requested JSON object.
+Use plain English without TeX commands or backslashes in the explanation. For `clear` or
+`uncertain`, use an empty evidence list. For `defect`, prefer plain-language evidence excerpts;
+escape any backslash in a quoted excerpt as valid JSON. The response must be only the requested
+JSON object.
 
 Question:
 {row.get("user_prompt") or "(missing)"}

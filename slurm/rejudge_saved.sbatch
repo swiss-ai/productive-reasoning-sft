@@ -10,4 +10,5 @@ ulimit -c 0
 
 srun --environment="$SFT_PROJECT_DIR/container/cscs.toml" \
   bash -lc "cd '$SFT_PROJECT_DIR' && python scripts/rejudge_saved.py \
-    '$SFT_CONFIG' '$SFT_SAVED_CANDIDATES' '$SFT_REJUDGE_OUTPUT'"
+    '$SFT_CONFIG' '$SFT_SAVED_CANDIDATES' '$SFT_REJUDGE_OUTPUT' \
+    '${SFT_CALIBRATION_CASES:-}'"
