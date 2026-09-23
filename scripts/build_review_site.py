@@ -23,6 +23,7 @@ def main() -> None:
 
     rows = ds.dataset(str(args.candidates), format="parquet").to_table().to_pylist()
     review = [_review_row(row) for row in rows]
+    total_rows = len(review)
     if args.curation:
         choices = json.loads(args.curation.read_text(encoding="utf-8"))
         if not isinstance(choices, list):
@@ -50,9 +51,9 @@ def main() -> None:
     html = template.replace("__REVIEW_TITLE__", title).replace("__REVIEW_DATA__", data)
     html = html.replace(
         "__REVIEW_SUBTITLE__",
-        "Individually inspected examples from the retained rollouts. This is a curated demonstration, not a random sample or an accuracy estimate."
+        f"Individually inspected examples from {total_rows} retained rollouts. This is a curated demonstration, not a random sample or an accuracy estimate."
         if args.curation
-        else "Every rollout is retained. Selection is the pipeline decision, not human approval.",
+        else f"All {total_rows} rollouts are retained. Selection is the pipeline decision, not independent human approval.",
     )
     args.output_html.parent.mkdir(parents=True, exist_ok=True)
     args.output_html.write_text(html, encoding="utf-8")
