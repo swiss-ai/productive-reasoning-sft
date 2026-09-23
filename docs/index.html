@@ -6,6 +6,11 @@
   <meta name="description" content="Research review of math and reasoning SFT rollouts.">
   <title>Productive reasoning SFT · rollout review</title>
   <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/css/texmath.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.7/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/texmath.min.js"></script>
   <script defer src="data.js"></script>
   <script defer src="site.js"></script>
 </head>
@@ -18,16 +23,14 @@
     <p class="batch-summary"><span id="batch-summary"></span> These are pipeline decisions, not a measurement of filter accuracy. Two earlier pilot cases are included and labeled. None of the new 50 is a convincing repeated-checking rejection.</p>
   </header>
 
-  <main>
-    <div class="chooser" aria-label="Choose a rollout">
-      <label for="rollout-search">Find a rollout</label>
-      <input id="rollout-search" type="search" placeholder="Search question, source, annotation, or ID" autocomplete="off">
-      <label for="rollout-select">Rollout</label>
-      <select id="rollout-select"></select>
-      <div class="navigation"><button id="previous" type="button">← Previous</button><span id="position"></span><button id="next" type="button">Next →</button></div>
+  <main class="workspace">
+    <aside class="rollout-nav" aria-label="Rollout index">
+      <h2>Rollouts <span id="rollout-count"></span></h2>
+      <div id="rollout-index"></div>
+    </aside>
+    <div class="content">
+      <article id="rollout" aria-live="polite" aria-label="Selected rollout"></article>
     </div>
-
-    <article id="rollout" aria-live="polite" aria-label="Selected rollout"></article>
   </main>
   <footer>Manual notes are explicitly labeled. Rows without one show the automated review only. A rejected row is still retained in the data.</footer>
 </body>

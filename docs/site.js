@@ -10,12 +10,19 @@
 
   const annotated = new Map(data.cases.map(row => [row.id, row]));
   const records = [
-    ...data.cases,
-    ...data.audit.filter(row => !annotated.has(row.id)),
+    ...data.audit.map(row => annotated.get(row.id) || row),
+    ...data.cases.filter(row => !data.audit.some(item => item.id === row.id)),
   ];
   const requested = decodeURIComponent(location.hash.slice(1));
-  let selectedId = records.some(row => row.id === requested) ? requested : records[0].id;
-  let visible = records;
+  let selectedId = records.some(row => row.id === requested) ? requested : data.cases[0].id;
+  const indexButtons = new Map();
+  const markdown = window.markdownit && window.texmath && window.katex
+    ? window.markdownit({ html: false, linkify: false }).use(window.texmath, {
+      engine: window.katex,
+      delimiters: ['dollars', 'brackets', 'beg_end'],
+      katexOptions: { throwOnError: false, trust: false, maxExpand: 1000, maxSize: 10 },
+    })
+    : null;
 
   const add = (parent, tag, className = '', value = null) => {
     const element = document.createElement(tag);
@@ -38,8 +45,26 @@
   const friendly = value => display(value).replaceAll('_', ' ');
   const score = value => value === null || value === undefined ? 'unavailable' : `${value}/5`;
 
-  function reviewRow(list, label, text, minor = null) {
-    const row = add(list, 'div', 'review-row');
+  function renderMarkdown(parent, value) {
+    if (!value) {
+      parent.classList.add('empty');
+      parent.textContent = '(empty)';
+      return;
+    }
+    if (markdown) {
+      try {
+        parent.innerHTML = markdown.render(value);
+        return;
+      } catch (error) {
+        console.warn('Markdown rendering failed; showing original text.', error);
+      }
+    }
+    parent.classList.add('raw-fallback');
+    parent.textContent = value;
+  }
+
+  function reviewRow(list, label, text, minor = null, tone = '') {
+    const row = add(list, 'div', `review-row${tone ? ` tone-${tone}` : ''}`);
     add(row, 'dt', '', label);
     const detail = add(row, 'dd', '', text);
     if (minor) add(detail, 'span', 'minor', minor);
@@ -83,7 +108,7 @@
     ]) {
       const pane = add(panes, 'section', 'pane');
       add(pane, 'h3', '', heading);
-      add(pane, 'div', `pane-body${value ? '' : ' empty'}`, value || '(empty)');
+      renderMarkdown(add(pane, 'div', 'pane-body'), value);
     }
 
     const review = add(article, 'section', 'review');
@@ -94,30 +119,36 @@
       list,
       'Source answer check',
       `${friendly(row.verification)}${row.verifier ? ` via ${friendly(row.verifier)}` : ''}`,
-      'A source match checks the answer where possible; it does not certify the reasoning trace.'
+      'A source match checks the answer where possible; it does not certify the reasoning trace.',
+      row.verification === 'passed' ? 'pass' : row.verification === 'failed' ? 'reject' : 'warn'
     );
     reviewRow(
       list,
       'Correctness judge',
       row.judge?.correctness?.feedback || 'No parsed correctness feedback.',
-      `Combined verdict: ${friendly(row.correctness)}${row.judge?.correctness?.verdict ? ` · judge: ${friendly(row.judge.correctness.verdict)}` : ''}`
+      `Combined verdict: ${friendly(row.correctness)}${row.judge?.correctness?.verdict ? ` · judge: ${friendly(row.judge.correctness.verdict)}` : ''}`,
+      row.correctness === 'incorrect' ? 'reject' : ['verified', 'supported', 'correct'].includes(row.correctness) ? 'pass' : 'warn'
     );
     reviewRow(
       list,
       'Reasoning judge',
       row.judge?.reasoning?.feedback || 'No parsed reasoning feedback.',
-      `Reasoning score: ${score(row.judge?.reasoning?.score)}`
+      `Reasoning score: ${score(row.judge?.reasoning?.score)}`,
+      row.judge?.reasoning?.score >= 4 ? 'pass' : row.judge?.reasoning?.score <= 2 ? 'reject' : 'warn'
     );
     reviewRow(
       list,
       'Response judge',
       row.judge?.response?.feedback || 'No parsed response feedback.',
-      `Response score: ${score(row.judge?.response?.score)}`
+      `Response score: ${score(row.judge?.response?.score)}`,
+      row.judge?.response?.score >= 4 ? 'pass' : row.judge?.response?.score <= 2 ? 'reject' : 'warn'
     );
     const hygiene = reviewRow(
       list,
       'Focused hygiene checks',
-      `${friendly(row.hygiene)}${row.findings?.length ? ` · ${row.findings.length} non-clear finding${row.findings.length === 1 ? '' : 's'}` : ' · no non-clear findings recorded'}`
+      `${friendly(row.hygiene)}${row.findings?.length ? ` · ${row.findings.length} non-clear finding${row.findings.length === 1 ? '' : 's'}` : ' · no non-clear findings recorded'}`,
+      null,
+      row.hygiene === 'passed' ? 'pass' : row.hygiene === 'failed' ? 'reject' : 'warn'
     );
     for (const finding of row.findings || []) {
       const item = add(hygiene, 'div', 'minor');
@@ -129,54 +160,44 @@
     reviewRow(
       list,
       'Completion and length',
-      `Finish reason: ${friendly(row.finish)} · reasoning ${row.reasoning_tokens ?? '—'} tokens · answer ${row.response_tokens ?? '—'} tokens`
+      `Finish reason: ${friendly(row.finish)} · reasoning ${row.reasoning_tokens ?? '—'} tokens · answer ${row.response_tokens ?? '—'} tokens`,
+      null,
+      row.finish === 'length' ? 'reject' : row.finish === 'stop' ? 'pass' : 'warn'
     );
     reviewRow(
       list,
       'Strict SFT label',
       row.selected ? 'Eligible. This is a pipeline label, not independent human approval.' : 'Not eligible; the row is still retained.',
-      row.exclusions?.length ? `Reasons: ${row.exclusions.map(friendly).join(', ')}` : `Quality score: ${row.score}/5`
+      row.exclusions?.length ? `Reasons: ${row.exclusions.map(friendly).join(', ')}` : `Quality score: ${row.score}/5`,
+      row.selected ? 'pass' : 'reject'
     );
   }
 
-  function optionLabel(row, index) {
-    const note = annotated.has(row.id) ? 'Manual note · ' : '';
-    const cohort = row.cohort.startsWith('Earlier') ? 'EARLIER' : 'NEW';
-    return `${String(index + 1).padStart(2, '0')} · ${cohort} · ${note}${row.title || `${sourceName(row.source)}: ${short(row.question, 82)}`}`;
-  }
-
-  function updateChooser() {
-    const query = compact($('rollout-search').value).toLowerCase();
-    visible = records.filter(row => !query || `${row.id} ${row.source} ${row.question} ${row.title || ''} ${row.summary || ''}`.toLowerCase().includes(query));
-    if (!visible.some(row => row.id === selectedId)) selectedId = visible[0]?.id;
-    const select = $('rollout-select');
-    select.replaceChildren();
-    visible.forEach((row, index) => {
-      const option = add(select, 'option', '', optionLabel(row, index));
-      option.value = row.id;
-    });
-    select.value = selectedId || '';
-    const index = visible.findIndex(row => row.id === selectedId);
-    $('position').textContent = visible.length ? `${index + 1} of ${visible.length}` : '0 found';
-    $('previous').disabled = index <= 0;
-    $('next').disabled = index < 0 || index >= visible.length - 1;
-    if (selectedId) history.replaceState(null, '', `#${selectedId}`);
-    render();
-  }
-
-  function step(direction) {
-    const index = visible.findIndex(row => row.id === selectedId);
-    const next = visible[index + direction];
-    if (next) {
-      selectedId = next.id;
-      updateChooser();
+  function selectRollout(id) {
+    selectedId = id;
+    for (const [rowId, button] of indexButtons) {
+      const active = rowId === id;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'true');
+      else button.removeAttribute('aria-current');
     }
+    history.replaceState(null, '', `#${encodeURIComponent(id)}`);
+    render();
+    window.scrollTo({ top: 0 });
   }
 
   $('batch-summary').textContent = `${data.batch.count} new rollouts · ${data.batch.passed} eligible · ${data.batch.rejected} not eligible · ${data.cases.length} annotated examples.`;
-  $('rollout-search').addEventListener('input', updateChooser);
-  $('rollout-select').addEventListener('change', event => { selectedId = event.target.value; updateChooser(); });
-  $('previous').addEventListener('click', () => step(-1));
-  $('next').addEventListener('click', () => step(1));
-  updateChooser();
+  $('rollout-count').textContent = records.length;
+  for (const [index, row] of records.entries()) {
+    const button = add($('rollout-index'), 'button', `index-item ${row.selected ? 'pass' : 'reject'}`);
+    button.type = 'button';
+    button.setAttribute('aria-label', `Rollout ${index + 1}: ${row.selected ? 'eligible' : 'not eligible'}, quality ${row.score} of 5`);
+    add(button, 'span', 'index-number', String(index + 1).padStart(2, '0'));
+    const meta = add(button, 'span', 'index-meta');
+    add(meta, 'span', 'index-decision', row.selected ? 'eligible' : 'not eligible');
+    add(meta, 'span', 'index-score', `${row.score}/5`);
+    button.addEventListener('click', () => selectRollout(row.id));
+    indexButtons.set(row.id, button);
+  }
+  selectRollout(selectedId);
 })();
