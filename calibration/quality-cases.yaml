@@ -1,0 +1,37 @@
+# Human review targets from real saved rollouts. These are calibration examples,
+# not an exhaustive correctness proof for the 24-row pilot.
+cases:
+  - id: equivalent_ode_forms
+    sample_id_prefix: 5b501856e175
+    expectation: pass
+    note: Implicit and explicit forms are equivalent answers; extraction must not mark them ambiguous.
+
+  - id: conditional_domain_answer
+    sample_id_prefix: a3794adfedb1
+    expectation: pass
+    note: No maximum over unrestricted reals; the response correctly labels 3^15 as conditional on positivity.
+
+  - id: literal_triangle_question
+    sample_id_prefix: b861d0fd430d
+    expectation: reject
+    note: The literal condition is automatic and gives 144; leading with 400 answers an invented repair.
+
+  - id: alternative_survo_solution
+    sample_id_prefix: dbf613e8f0b8
+    expectation: pass
+    note: The candidate matrix satisfies the source puzzle's fixed cells, sums, and multiset.
+
+  - id: unsupported_group_proof
+    sample_id_prefix: 129330cada64
+    expectation: reject
+    note: Matching the source's Yes answer does not establish the central zero-sum existence theorem.
+
+  - id: smooth_rearrangement_coefficient
+    sample_id_prefix: 8d629d41e35e
+    expectation: score_below_5
+    note: From a-c(x-10)^2 the superlevel width is 2 sqrt(delta/c), not 2 sqrt(2 delta/c).
+
+  - id: wrong_source_yummy_number
+    sample_id_prefix: d4cd298b0139
+    expectation: manual_conflict
+    note: The candidate's 43 starts a valid 34-term sum of 2023; source answer 1011 is not minimal.
