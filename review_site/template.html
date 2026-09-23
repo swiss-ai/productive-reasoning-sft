@@ -185,6 +185,14 @@
       const part = add(parent, 'section', ''); add(part, 'h3', '', heading);
       add(part, 'div', `text-block ${className}`, display(value)); return part;
     }
+    function boundedSection(parent, heading, value, limit, className='') {
+      const content = display(value);
+      if (content.length <= limit) return section(parent, heading, content, className);
+      const part = add(parent, 'section', ''); add(part, 'h3', '', heading);
+      add(part, 'div', `text-block ${className}`, `${content.slice(0, limit)}\n…`);
+      detailBox(part, `Open full ${heading.toLowerCase()} (${content.length.toLocaleString()} characters)`, content);
+      return part;
+    }
     function detailBox(parent, heading, value) {
       const details = add(parent, 'details', ''); add(details, 'summary', '', heading);
       add(details, 'div', 'text-block', display(value)); return details;
@@ -217,9 +225,9 @@
       const notice = add(body, 'div', `notice ${row.selected ? '' : 'reject'}`);
       add(notice, 'strong', '', row.selected ? 'Pipeline verdict · passed' : 'Pipeline verdict · rejected');
       add(notice, 'div', 'reasons', row.selected ? 'Complete, sufficiently supported, and above the strict quality threshold under this policy.' : (row.exclusion_reasons.length ? row.exclusion_reasons.join(' · ') : 'See the quality and verification details below.'));
-      section(body, 'Question', row.question);
+      boundedSection(body, 'Question', row.question, 950);
       if (row.annotation?.excerpt) section(body, 'Passage to inspect', row.annotation.excerpt);
-      section(body, 'Final response', row.response, 'answer');
+      boundedSection(body, 'Final response', row.response, 1200, 'answer');
 
       const hygieneSection = add(body, 'section', ''); add(hygieneSection, 'h3', '', 'Focused hygiene checks');
       const findings = quality.hygiene?.findings || [];
