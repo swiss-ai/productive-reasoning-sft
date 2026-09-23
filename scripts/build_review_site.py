@@ -14,9 +14,6 @@ def main() -> None:
     parser.add_argument("candidates", type=Path)
     parser.add_argument("output_html", type=Path)
     parser.add_argument("--title", default="Productive reasoning · pilot review")
-    parser.add_argument("--context-note", default="", help="Short limitation shown below the title")
-    parser.add_argument("--related-href", default="", help="Relative link to a companion review page")
-    parser.add_argument("--related-label", default="Open companion view")
     parser.add_argument(
         "--curation",
         type=Path,
@@ -52,20 +49,12 @@ def main() -> None:
         encoding="utf-8"
     )
     html = template.replace("__REVIEW_TITLE__", title).replace("__REVIEW_DATA__", data)
-    related = (
-        f'<a href="{_html_text(args.related_href)}">{_html_text(args.related_label)}</a>'
-        if args.related_href
-        else ""
-    )
-    html = html.replace("__REVIEW_NAV__", related)
-    subtitle = (
+    html = html.replace(
+        "__REVIEW_SUBTITLE__",
         f"Individually inspected examples from {total_rows} retained rollouts. This is a curated demonstration, not a random sample or an accuracy estimate."
         if args.curation
-        else f"All {total_rows} rollouts are retained. Selection is the pipeline decision, not independent human approval."
+        else f"All {total_rows} rollouts are retained. Selection is the pipeline decision, not independent human approval.",
     )
-    if args.context_note:
-        subtitle += " " + args.context_note
-    html = html.replace("__REVIEW_SUBTITLE__", _html_text(subtitle))
     args.output_html.parent.mkdir(parents=True, exist_ok=True)
     args.output_html.write_text(html, encoding="utf-8")
     print(f"{args.output_html}: {len(review)} candidates")
