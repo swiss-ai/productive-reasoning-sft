@@ -157,6 +157,23 @@ def _verify_extracted(
     candidate_items = _answer_items(candidate)
     if not gold_items or not candidate_items:
         return VerificationResult(score=None, details={"reason": "empty_math_answer"})
+    # math-verify compares expression syntax, not equivalence classes of solution
+    # families or multiple requested outputs. An extracted equation may merely use
+    # a different name for an arbitrary constant; a series may be one part of an
+    # answer whose other requested part is a radius. Let the judge assess these.
+    if any(
+        "=" in item or any(marker in item for marker in (r"\sum", r"\int", r"\prod"))
+        for item in [*gold_items, *candidate_items]
+    ):
+        return VerificationResult(
+            score=None, details={"reason": "solution_family_or_multicomponent_requires_model_review"}
+        )
+    # Ray invokes this checker in a worker thread. math-verify's signal-based timeout
+    # cannot run there, so keep the no-timeout path limited to short answer spans.
+    if any(len(item) > 512 for item in [*gold_items, *candidate_items]):
+        return VerificationResult(
+            score=None, details={"reason": "math_answer_too_long_for_typed_check"}
+        )
     if len(gold_items) != len(candidate_items):
         return VerificationResult(
             score=0.0,
@@ -180,7 +197,7 @@ def _verify_extracted(
         return parse(
             f"\\[\\boxed{{{value}}}\\]",
             extraction_config=extraction,
-            parsing_timeout=5,
+            parsing_timeout=None,
         )
 
     remaining = [parsed(item) for item in candidate_items]
@@ -194,7 +211,7 @@ def _verify_extracted(
             (
                 index
                 for index, predicted in enumerate(remaining)
-                if verify(gold, predicted, timeout_seconds=5)
+                if verify(gold, predicted, timeout_seconds=None)
             ),
             None,
         )
