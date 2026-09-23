@@ -310,7 +310,9 @@ to the concise feedback. A score of 5 must have no issues.
 For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
 the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence
 cannot settle correctness. High confidence requires direct verification, a sound derivation, or a
-confirmed counterexample. Feedback must identify the decisive evidence in at most 50 words.
+confirmed counterexample. Each feedback field must be under 25 words. Use plain English and
+ASCII names for mathematical symbols: no TeX commands, backslashes, raw line breaks, or internal
+quotation marks inside JSON strings. Keep the judgment concrete rather than copying equations.
 
 Question:
 {row.get("user_prompt", "")}
@@ -402,6 +404,9 @@ class FinalizeQuality:
                 scores=scores,
                 aggregate=scores.effective() if scores is not None else None,
                 analysis_samples=len(_json_list(row.get("critic_analyses_json"))),
+                retries=int(row.get("judge_retry_count") or 0),
+                finish_reason=row.get("judge_finish_reason"),
+                generated_tokens=row.get("judge_num_generated_tokens"),
                 error=error,
             )
             row["judge_status"] = "passed" if error is None else "error"

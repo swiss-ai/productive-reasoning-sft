@@ -62,7 +62,7 @@ quality:
     analysis_max_tokens: 2048
     hygiene_max_tokens: 768
     reasoning_effort: medium
-    rubric_version: 8
+    rubric_version: 9
 
 output:
   parquet_target_mb: 64

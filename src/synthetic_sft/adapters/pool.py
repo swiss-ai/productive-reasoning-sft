@@ -199,6 +199,11 @@ def _verify_extracted(
             None,
         )
         if match is None:
+            if any("C_" in item for item in [*gold_items, *candidate_items]):
+                return VerificationResult(
+                    score=None,
+                    details={"reason": "parameterized_solution_family_requires_model_review"},
+                )
             return VerificationResult(
                 score=0.0,
                 details={

@@ -22,6 +22,7 @@ from synthetic_sft.quality import (
     critic_prompt,
     local_claims_prompt,
     parse_answer_extraction,
+    parse_judge_scores,
     split_reasoning,
 )
 from synthetic_sft.schemas import AnswerExtraction, JudgeScores, ModelHygieneAssessment
@@ -192,6 +193,14 @@ class VLLMBatchPredictor:
 
     def _quality(self, records: list[dict[str, Any]]) -> None:
         for row in records:
+            for field in (
+                "judge_generation_error",
+                "judge_retry_count",
+                "judge_first_raw_output",
+                "judge_finish_reason",
+                "judge_num_generated_tokens",
+            ):
+                row.pop(field, None)
             self._parse_and_verify.parse(row)
         self._extract_answers(records)
         # Structured extraction makes heterogeneous source answers safe for deterministic
@@ -200,6 +209,7 @@ class VLLMBatchPredictor:
             self._parse_and_verify.verify(row)
         self._run_critiques(records)
         self._arbitrate(records)
+        self._retry_failed_arbitrations(records)
         self._run_hygiene(records)
         for row in records:
             self._finalize_quality(row)
@@ -397,7 +407,59 @@ class VLLMBatchPredictor:
             phase="arbitration",
         )
         for row, output in results:
-            row["judge_raw_output"] = output.outputs[0].text
+            candidate = output.outputs[0]
+            row["judge_raw_output"] = candidate.text
+            row["judge_finish_reason"] = candidate.finish_reason
+            row["judge_num_generated_tokens"] = len(candidate.token_ids or [])
+
+    def _retry_failed_arbitrations(self, records: list[dict[str, Any]]) -> None:
+        failed = [
+            row for row in records if parse_judge_scores(row.get("judge_raw_output"))[0] is None
+        ]
+        if not failed:
+            return
+        judge = self.config.quality.judge
+        retry_tokens = max(1024, judge.max_tokens)
+        messages = []
+        sampling = []
+        for row in failed:
+            original = str(row.get("judge_raw_output") or "")
+            row["judge_first_raw_output"] = original
+            row["judge_retry_count"] = 1
+            if '"response"' in original:
+                prompt = (
+                    "Repair this malformed judge JSON. Preserve its verdicts and scores. "
+                    "Use brief plain-English feedback without TeX, backslashes, or internal "
+                    "quotation marks. Return only one complete JSON object matching the "
+                    "original keys.\n\nMalformed JSON:\n" + original[:8000]
+                )
+            else:
+                prompt = (
+                    "Return one complete JSON object. Every feedback field must use fewer "
+                    "than 20 plain-English words, with no TeX, backslashes, or internal "
+                    "quotation marks. No markdown or extra text.\n\n"
+                    + arbitration_prompt(
+                        row,
+                        _json_string_list(row.get("critic_analyses_json")),
+                        judge.rubric_version,
+                    )
+                )
+            messages.append([{"role": "user", "content": self._fit_prompt(prompt, retry_tokens)}])
+            sampling.append(
+                self._structured_sampling(row, JudgeScores, retry_tokens, "judge_retry")
+            )
+        results = self._chat(
+            failed,
+            messages,
+            sampling,
+            {"enable_thinking": False},
+            phase="arbitration",
+        )
+        for row, output in results:
+            candidate = output.outputs[0]
+            row["judge_raw_output"] = candidate.text
+            row["judge_finish_reason"] = candidate.finish_reason
+            row["judge_num_generated_tokens"] = len(candidate.token_ids or [])
 
     def _messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
         messages = []

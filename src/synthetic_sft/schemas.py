@@ -177,6 +177,9 @@ class JudgeDetails(StrictModel):
     scores: JudgeScores | None = None
     aggregate: int | None = Field(default=None, ge=1, le=5)
     analysis_samples: int = Field(default=0, ge=0)
+    retries: int = Field(default=0, ge=0)
+    finish_reason: str | None = None
+    generated_tokens: int | None = Field(default=None, ge=0)
     error: str | None = None
 
     @model_validator(mode="after")
@@ -190,6 +193,9 @@ class JudgeDetails(StrictModel):
                     self.scores,
                     self.aggregate,
                     self.analysis_samples or None,
+                    self.retries or None,
+                    self.finish_reason,
+                    self.generated_tokens,
                     self.error,
                 )
             ):
@@ -288,7 +294,7 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[7] = 7
+    schema_version: Literal[8] = 8
     aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
     answer: AnswerDetails
