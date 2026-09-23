@@ -230,9 +230,35 @@ reference is reliable, and every material reasoning or response defect you can s
 """
 
 
+def local_claims_prompt(row: Mapping[str, Any]) -> str:
+    return f"""Audit the proposed SFT reasoning line by line for local mathematical truth.
+Ignore whether its final yes/no or number matches a source answer: a correct conclusion does not
+excuse a false intermediate equality. Check displayed algebra, coefficients, counts, inequalities,
+substitutions, and the hypotheses of any invoked theorem. For a counterexample, verify the
+construction has the claimed properties. Work out at least one decisive calculation yourself.
+
+Report the first concrete false or unsupported step, quoting its exact short span and showing the
+correct calculation or missing implication. Distinguish a harmless notation choice from a false
+claim that would teach an SFT model wrong mathematics. If no local defect is found, say which
+steps you actually checked; do not claim to have checked all steps unless you did. Do not rewrite
+the solution, infer the author's intent, or trust polished prose.
+
+Question:
+{row.get("user_prompt", "")}
+
+Candidate reasoning:
+{row.get("reasoning") or "(no separate reasoning trace)"}
+
+Candidate response:
+{row.get("response") or "(missing)"}
+"""
+
+
 def arbitration_prompt(row: Mapping[str, Any], analyses: list[str], rubric_version: int) -> str:
     rendered = "\n\n".join(
-        f"Independent critique {index + 1}:\n{analysis}" for index, analysis in enumerate(analyses)
+        f"{'Global correctness critique' if index % 2 == 0 else 'Local step audit'} "
+        f"{index + 1}:\n{analysis}"
+        for index, analysis in enumerate(analyses)
     )
     return f"""You are the final conservative arbiter for SFT data quality. Validate the independent
 critiques below instead of blindly following either one. A claimed defect counts only if you can
@@ -262,6 +288,11 @@ Use integer scores 1 through 5 for reasoning and response:
 3 = mostly correct but requiring a substantive local edit or containing a meaningful gap.
 2 = useful progress but a serious error or omission requires a major rewrite.
 1 = absent, fundamentally wrong, incoherent, or unusable without replacement.
+
+A false local mathematical equality, coefficient, count, or implication is not a style issue.
+Even if it does not change the final conclusion, reasoning is at most 3 with
+`factual_or_logical_error`; do not train a false step. Check the local step audit's calculation
+before accepting or dismissing its claim.
 
 Grade the reasoning independently of the final answer: a correct answer or matching source
 reference cannot validate an unsupported proof. If a central step is asserted without a derivation

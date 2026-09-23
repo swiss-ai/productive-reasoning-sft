@@ -20,6 +20,7 @@ from synthetic_sft.quality import (
     answer_extraction_prompt,
     arbitration_prompt,
     critic_prompt,
+    local_claims_prompt,
     parse_answer_extraction,
     split_reasoning,
 )
@@ -334,8 +335,11 @@ class VLLMBatchPredictor:
         sampling = []
         judge = self.config.quality.judge
         for index, row in enumerate(records):
-            prompt = self._fit_prompt(critic_prompt(row), judge.analysis_max_tokens)
             for sample_index in range(judge.analysis_samples):
+                prompt = self._fit_prompt(
+                    critic_prompt(row) if sample_index % 2 == 0 else local_claims_prompt(row),
+                    judge.analysis_max_tokens,
+                )
                 request = {
                     "candidate_id": f"{row['candidate_id']}:critique:{sample_index}",
                     "row_index": index,

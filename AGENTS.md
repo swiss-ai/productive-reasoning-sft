@@ -98,9 +98,9 @@ polish call produces natural `reasoning` and `response` text; training output ha
 `\\boxed{}` or answer tags. The raw draft is retained for audit. The candidate answer extractor
 sees only the question and final response, never the expected answer or trace. Native Reasoning
 Gym scoring or typed math verification is used where possible; parse failures are indeterminate,
-not mathematical failures. Two independent critiques inspect correctness and general reasoning;
-the arbiter returns correctness plus separate reasoning and response scores. Four narrower hygiene
-requests are batched in one wave, not sent sequentially per sample.
+not mathematical failures. Two complementary critiques inspect global correctness and local
+mathematical steps; the arbiter returns correctness plus separate reasoning and response scores.
+Four narrower hygiene requests are batched in one wave, not sent sequentially per sample.
 
 The current 1–5 rubric is: 5 training-ready; 4 correct with a minor edit; 3 substantive local
 repair; 2 useful progress but major rewrite; 1 unusable. Score 0 means confirmed incorrectness,

@@ -249,12 +249,20 @@ def repeated_numeric_result_signal(reasoning: str) -> str | None:
     repeated = [(value, sites) for value, sites in positions.items() if len(sites) >= 4]
     if not repeated:
         return None
-    value, sites = max(repeated, key=lambda item: (len(item[1]), item[1][-1] - item[1][0]))
+    ranked = sorted(
+        repeated,
+        key=lambda item: (len(item[1]), item[1][-1] - item[1][0]),
+        reverse=True,
+    )[:3]
     total = max(1, len(reasoning))
+    summary = "; ".join(
+        f"{value}: {len(sites)} appearances between {sites[0] / total:.0%} "
+        f"and {sites[-1] / total:.0%}"
+        for value, sites in ranked
+    )
     return (
-        f"The precise result beginning {value} appears {len(sites)} times, from about "
-        f"{sites[0] / total:.0%} to {sites[-1] / total:.0%} of the trace. Check whether "
-        "later recomputations resolve uncertainty or merely reconfirm a settled value."
+        f"Repeated precise results (not a verdict): {summary}. Check whether late "
+        "recomputation resolves uncertainty or merely reconfirms settled values."
     )
 
 
