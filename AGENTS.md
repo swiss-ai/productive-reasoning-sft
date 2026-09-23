@@ -45,7 +45,7 @@ Correctness, completion, and productivity are separate judgments. The six hygien
 | No new progress | Long continuation resolving nothing, even without repeated wording | Necessary exploration |
 | Unresolved branch | Contradiction left unresolved or final answer relying on an abandoned branch | Explicitly corrected mistakes |
 | Reasoning-limit stop | Token cap reached before clean completion | A long trace that does finish |
-| Missing/malformed final | Separate response absent, ambiguous, or unextractable | Concise valid final response |
+| Missing/malformed final | Separate response absent or no answer asserted | Equivalent or conditional answers that need review |
 
 Semantic checks use narrow critical prompts with structured `defect`/`clear`/`uncertain` results,
 quoted evidence, and explanations. Exact quote anchoring prevents invented evidence but does not
@@ -213,11 +213,12 @@ unsound, so the judge still needs manual calibration.
 
 - Calibrate the narrow Qwen judge on real traces. If false negatives remain high, tune prompts or
   switch to a stronger, low-hallucination judge via `quality.judge.model_source`.
-- **Do not enable critique-guided rewriting by default.** If correct but repairable traces are
-  being rejected too often, evaluate a separate revision stage that receives the judge's finding
-  and reason separately, revises only substantiated defects, then re-runs independent correctness
-  and hygiene checks. Keep original and revised traces paired; reject any repair that hides errors,
-  changes the answer, removes useful exploration, or costs more than it helps.
+- **Do not enable critique-guided rewriting by default.** If strict-view rejection exceeds 80% on
+  a representative batch, evaluate a separate revision stage for correct, repairable traces. Feed
+  the judge's structured decision and explanation to a refactor, then independently re-run the
+  same correctness and hygiene checks on the revision. Keep original and revised traces paired;
+  reject any repair that hides errors, changes the answer, removes useful exploration, or costs
+  more than it helps. The paired 24-prompt pilot rejected 11/24 (46%), below this trigger.
 - Keep source-provided solutions as archived references/baselines; a paired source-solution
   comparison or source-trace SFT arm needs explicit implementation, not an undocumented assumption.
 - Swiss Model Launcher is the longer-term serving path; GLM-5.2 is a possible stronger teacher
