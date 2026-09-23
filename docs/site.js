@@ -8,13 +8,12 @@
     return;
   }
 
-  const annotated = new Map(data.cases.map(row => [row.id, row]));
   const records = [
-    ...data.audit.map(row => annotated.get(row.id) || row),
-    ...data.cases.filter(row => !data.audit.some(item => item.id === row.id)),
+    ...data.audit,
+    ...data.cases.filter(row => row.cohort.startsWith('Earlier')),
   ];
   const requested = decodeURIComponent(location.hash.slice(1));
-  let selectedId = records.some(row => row.id === requested) ? requested : data.cases[0].id;
+  let selectedId = records.some(row => row.id === requested) ? requested : records[0].id;
   const indexButtons = new Map();
   const markdown = window.markdownit && window.texmath && window.katex
     ? window.markdownit({ html: false, linkify: false }).use(window.texmath, {
@@ -30,11 +29,6 @@
     if (value !== null && value !== undefined) element.textContent = String(value);
     parent.appendChild(element);
     return element;
-  };
-  const compact = value => String(value ?? '').replace(/\s+/g, ' ').trim();
-  const short = (value, length = 95) => {
-    const text = compact(value);
-    return text.length > length ? `${text.slice(0, length).trimEnd()}…` : text;
   };
   const sourceName = value => {
     const [source, task] = String(value ?? '').split(':');
@@ -82,23 +76,13 @@
     add(top, 'span', row.cohort.startsWith('Earlier') ? 'cohort-earlier' : '', row.cohort);
     add(top, 'span', '', '·');
     add(top, 'span', '', sourceName(row.source));
-    add(head, 'h2', '', row.title || short(row.question, 125));
+    add(head, 'h2', '', `Rollout ${String(records.indexOf(row) + 1).padStart(2, '0')}`);
     add(head, 'div', 'record-id', `Candidate ${row.id}`);
     const meta = add(head, 'div', 'record-meta');
     add(meta, 'span', `decision ${row.selected ? 'pass' : 'reject'}`, row.selected ? 'Strict SFT: eligible' : 'Strict SFT: not eligible');
     add(meta, 'span', '', `Quality ${row.score}/5`);
     add(meta, 'span', '', `Correctness: ${friendly(row.correctness)}`);
     add(meta, 'span', '', `Hygiene: ${friendly(row.hygiene)}`);
-
-    if (annotated.has(row.id)) {
-      const note = add(article, 'section', 'annotation');
-      add(note, 'h3', '', `Manual annotation · ${row.cohort}`);
-      add(note, 'p', '', row.summary);
-      add(note, 'p', '', row.why);
-      if (row.quote) add(note, 'blockquote', '', row.quote);
-    } else {
-      add(article, 'p', 'annotation-absence', 'No manual annotation for this rollout; the review below is automated.');
-    }
 
     const panes = add(article, 'div', 'panes');
     for (const [heading, value] of [
@@ -186,7 +170,7 @@
     window.scrollTo({ top: 0 });
   }
 
-  $('batch-summary').textContent = `${data.batch.count} new rollouts · ${data.batch.passed} eligible · ${data.batch.rejected} not eligible · ${data.cases.length} annotated examples.`;
+  $('batch-summary').textContent = `${data.batch.count} new rollouts · ${data.batch.passed} eligible · ${data.batch.rejected} not eligible.`;
   $('rollout-count').textContent = records.length;
   for (const [index, row] of records.entries()) {
     const button = add($('rollout-index'), 'button', `index-item ${row.selected ? 'pass' : 'reject'}`);
