@@ -33,8 +33,8 @@ cases:
 
   - id: smooth_rearrangement_coefficient
     sample_id_prefix: 8d629d41e35e
-    expectation: score_below_5
-    note: From a-c(x-10)^2 the superlevel width is 2 sqrt(delta/c), not 2 sqrt(2 delta/c).
+    expectation: reject
+    note: From a-c(x-10)^2 the superlevel width is 2 sqrt(delta/c), not 2 sqrt(2 delta/c). The conclusion survives, but SFT should not train the false equality.
 
   - id: wrong_source_yummy_number
     sample_id_prefix: d4cd298b0139
