@@ -7,6 +7,8 @@ cleaner cold-start SFT improves the starting point and early efficiency of a lat
 not an assumption that shorter reasoning is always better or that RL cannot learn to stop itself.
 
 For the full project context, pipeline design, pilot mix, and backlog, see [AGENTS.md](AGENTS.md).
+The [pilot review site](docs/index.html) shows annotated pass/reject examples and all 50 rollouts
+from the latest saved batch; two examples from an earlier pilot are clearly labeled.
 
 1. A varied math/reasoning source produces prompts and provenance.
 2. A large teacher model solves each prompt, then rewrites its scratch work into clean reasoning

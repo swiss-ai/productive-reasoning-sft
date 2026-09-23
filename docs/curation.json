@@ -1,0 +1,71 @@
+[
+  {
+    "id": "c7a02d5153f7f1bbebeb84ee6ad8dab94cfdbb187cff82be4fd6d63972f253c6",
+    "cohort": "New 50-rollout batch",
+    "title": "A long proof that earns its length",
+    "summary": "A functional equation needs several distinct steps; the teacher completes each one and stops.",
+    "why": "Surjectivity leads to injectivity, which determines the function. A final substitution checks the family of solutions. I manually checked the shift-and-period argument; the source comparison alone is not a proof check.",
+    "signal": "Progressive proof · complete answer"
+  },
+  {
+    "id": "fb0eebc9f6f2cf7b79ed0e568f11bd3edaf4414257bf51c9ada0c57000fe6f36",
+    "cohort": "New 50-rollout batch",
+    "title": "A compact derivation, then stop",
+    "summary": "A weighted-distance identity identifies the incenter as the unique solution.",
+    "why": "The trace derives the identity, applies the equality condition, and gives a short final answer. The mathematical identity and its application were checked manually; typed source verification was unavailable for this textual answer.",
+    "signal": "No redundant second derivation"
+  },
+  {
+    "id": "a376190062564f7014071324b018af496d9382ac56c3c9c4701bf5a5df8a55ef",
+    "cohort": "New 50-rollout batch",
+    "title": "One useful final check",
+    "summary": "A truth-teller puzzle is solved by a complete two-case split and one check of the surviving case.",
+    "why": "Checking the final assignment adds confidence without reopening a settled branch. The native task scorer verifies the final answer.",
+    "signal": "Useful verification, not circular checking"
+  },
+  {
+    "id": "9af52862e430c22f5bcd6917660e0978f1ad88a5def2fb72d04081a6d4bcd047",
+    "cohort": "Earlier 24-prompt pilot",
+    "title": "The proof abandons its hard step",
+    "summary": "The final Yes matches the source answer, but the proposed induction never establishes its key claim.",
+    "why": "The trace notices that its bound may fail, then asserts that group structure guarantees the result. The focused no-progress and unresolved-branch checks cite the actual passages. Matching a yes/no label does not certify the proof.",
+    "signal": "Unresolved branch · no new progress",
+    "quote": "The condition for existence is guaranteed by the structure of the group."
+  },
+  {
+    "id": "185f3db46cf314c519ff0d4d566ed8e1bca9be12adc363a6d55d6e348103ba82",
+    "cohort": "Earlier 24-prompt pilot",
+    "title": "Right answer, flawed derivation",
+    "summary": "The final No is right, but the trace states a false sign for 2/n − 1 when n > 2.",
+    "why": "The judge caught the sign error, and the final response repeats the flawed n > 2 argument. Its further claim that the derivative must diverge is itself too strong because the other bump contributes a linear term. This case shows both why trace review matters and why the judge needs calibration.",
+    "signal": "Correct final label ≠ correct reasoning",
+    "quote": "If $n > 2$, the exponent is positive, so $g'(t_0^+) = 0$."
+  },
+  {
+    "id": "b08893947f53b7adeacd8ae6370058649b30ce78d64ec6811e504dd6977ad3a2",
+    "cohort": "New 50-rollout batch",
+    "title": "Correct answer, unsupported global claim",
+    "summary": "The course-schedule answer is correct, but a few path checks do not prove a 66-node graph acyclic.",
+    "why": "The native scorer accepts True. The trace says it performed DFS, yet gives no full traversal, topological order, or other exhaustive certificate. The broad judge scores the reasoning 2/5, so the strict view excludes it without calling the answer wrong.",
+    "signal": "Correctness-only passes · productivity filter rejects",
+    "quote": "By systematically tracing the dependencies, every path eventually terminates at Course 4"
+  },
+  {
+    "id": "6658939b41ac473b2e30eca2c436e1faaeb386f61de926c9dc60ccbc0d9f5362",
+    "cohort": "New 50-rollout batch",
+    "title": "A method is not the requested answer",
+    "summary": "The model proposes a sensible algorithm but outputs Python code instead of the requested distance matrix.",
+    "why": "The final-answer check cannot extract the required matrix and the native task scorer rejects the response. The reasoning method may be useful, but this is not a complete training example for the prompt.",
+    "signal": "Missing task-specific final answer",
+    "quote": "def distance_to_nearest_zero(matrix):",
+    "quote_field": "response"
+  },
+  {
+    "id": "b54828280f2fe8e79fb81808d64e64248289b6d1fd6b999f89311551dca48500",
+    "cohort": "New 50-rollout batch",
+    "title": "The answer runs out of budget",
+    "summary": "The teacher recognizes a 1800° rotation changes nothing, but cannot finish copying a huge matrix.",
+    "why": "The response ends at the output cap and lacks a complete final matrix. The deterministic length-stop check excludes it despite the correct underlying observation. This demonstrates truncation, not repeated checking.",
+    "signal": "Reasoning-limit stop · incomplete response"
+  }
+]
