@@ -4,6 +4,7 @@ import heapq
 import json
 import math
 import os
+import threading
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -189,6 +190,7 @@ def _verify_extracted(
     from math_verify.parser import ExprExtractionConfig, LatexExtractionConfig
 
     extraction = (LatexExtractionConfig(boxed_match_priority=0), ExprExtractionConfig())
+    timeout_seconds = 5 if threading.current_thread() is threading.main_thread() else None
 
     def parsed(value: str):
         # Both sides are extractor-produced answer spans, never arbitrary prose. A display
@@ -197,7 +199,7 @@ def _verify_extracted(
         return parse(
             f"\\[\\boxed{{{value}}}\\]",
             extraction_config=extraction,
-            parsing_timeout=None,
+            parsing_timeout=timeout_seconds,
         )
 
     remaining = [parsed(item) for item in candidate_items]
@@ -211,7 +213,7 @@ def _verify_extracted(
             (
                 index
                 for index, predicted in enumerate(remaining)
-                if verify(gold, predicted, timeout_seconds=None)
+                if verify(gold, predicted, timeout_seconds=timeout_seconds)
             ),
             None,
         )
