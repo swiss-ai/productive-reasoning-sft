@@ -161,6 +161,11 @@ display markup such as dollar signs and \\boxed, but preserve mathematical meani
 canonical answer in `value`; use `values` for an unordered collection of multiple required answers.
 Equivalent exact, parameterized, and numerical forms of the same answer are not incompatible:
 extract the most precise form. An intermediate expression is not a second final answer.
+If the response gives different answers for explicitly different domains or interpretations,
+that is ONE conditional answer: use `text` with a concise `value` preserving each condition.
+Do not call it ambiguous merely because it contains several numbers. Two incompatible claims
+under the SAME conditions are ambiguous. Do not decide whether the conditions are justified;
+the correctness judge handles that separately.
 Record a unit separately. Always choose exactly one `answer_type`: use `number` for a numeric
 scalar, `expression` for a symbolic value, `equation`, `set`, `interval`, `boolean`, `choice`,
 `text`, `code`, or `proof` when applicable, and `other` only when none fits. If there is no asserted
@@ -182,6 +187,11 @@ answer without trusting the candidate reasoning. Then audit the reasoning step b
 the earliest material defect, if one exists. Try counterexamples and boundary cases. A source
 reference is strong evidence but may be malformed, incomplete, or wrong; explicitly flag a genuine
 reference conflict. Do not reward length, confidence, or polished prose. Do not merely summarize.
+Read the question literally before considering likely intended variants. A surprising, trivial,
+or poorly worded condition is still the stated condition. If the candidate primarily solves a
+different repaired question, that is a material defect even when it also notes the literal answer.
+Do not claim to have verified arithmetic, substitutions, or cases that you did not actually check;
+identify the specific check or leave it unverified.
 For proof questions, distinguish a correct yes/no conclusion from an actually established proof.
 Verify the claimed theorem's precise hypotheses and conclusion when possible; an unnamed theorem,
 an unsupported dimension/counting leap, or a citation that does not imply the required claim is a
@@ -231,6 +241,11 @@ claim. Matching a supplied reference is not evidence of correctness when that re
 premise. If a response correctly notices an impossible or underdetermined question but then asserts
 a result from invented assumptions, grade its answer `incorrect`, not `indeterminate`. Likewise,
 incompatible final conclusions are incorrect when at least one is materially false.
+If the literal question is coherent, grade its literal answer first. Do not replace a tautological,
+surprising, or awkward condition with the more interesting condition you think the author meant.
+If the candidate leads with an answer to that repaired problem, it is not training-ready even if a
+later caveat contains the literal answer. A reference for the repaired problem is not a reason to
+prefer it. Never say a calculation or case was independently verified unless you checked it.
 
 Rubric version: {rubric_version}
 Use integer scores 1 through 5 for reasoning and response:
