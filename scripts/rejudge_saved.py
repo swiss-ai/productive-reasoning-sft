@@ -41,7 +41,9 @@ def main() -> None:
     predictor._quality(rows)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist(rows), output_path, compression="zstd")
+    columns = sorted({key for row in rows for key in row})
+    complete_rows = [{key: row.get(key) for key in columns} for row in rows]
+    pq.write_table(pa.Table.from_pylist(complete_rows), output_path, compression="zstd")
     summary = {
         "source_candidates": str(args.source_candidates.resolve()),
         "config": str(args.config.resolve()),

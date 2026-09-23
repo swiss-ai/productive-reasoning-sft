@@ -312,7 +312,9 @@ the supplied reference is demonstrably unreliable, and `indeterminate` when the 
 cannot settle correctness. High confidence requires direct verification, a sound derivation, or a
 confirmed counterexample. Each feedback field must be under 25 words. Use plain English and
 ASCII names for mathematical symbols: no TeX commands, backslashes, raw line breaks, or internal
-quotation marks inside JSON strings. Keep the judgment concrete rather than copying equations.
+quotation marks inside YOUR JSON feedback strings. This restriction does not apply to the
+candidate: LaTeX in a candidate answer is acceptable unless the user explicitly forbids it.
+Keep the judgment concrete rather than copying equations.
 
 Question:
 {row.get("user_prompt", "")}

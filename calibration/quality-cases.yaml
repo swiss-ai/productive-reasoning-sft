@@ -26,6 +26,11 @@ cases:
     expectation: pass
     note: The candidate matrix satisfies the source puzzle's fixed cells, sums, and multiset.
 
+  - id: cubic_angle_parameterization
+    sample_id_prefix: adb8354b4ccd
+    expectation: reject
+    note: The roots are correct, but the claimed equivalent theta parameterization yields 25pi/18 rather than the listed 11pi/18; only their cosines agree.
+
   - id: unsupported_group_proof
     sample_id_prefix: 129330cada64
     expectation: reject
