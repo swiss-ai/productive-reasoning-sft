@@ -88,8 +88,8 @@ cases:
     sample_id_prefix: 129330cada64
     field: reasoning
     expected:
-      unresolved_branch: defect
-    note: The conclusion depends on a second case whose central existence claim is asserted, not established.
+      unresolved_branch: clear
+    note: The central theorem is unsupported, but there is no unresolved contradiction or abandoned branch. The broad proof-quality judge must reject it.
 
   - id: smooth_rearrangement_proof
     dataset: runs/reasoning-productivity-debug-24-v2/candidates
