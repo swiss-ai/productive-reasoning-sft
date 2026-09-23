@@ -207,7 +207,7 @@
       const body = add(detail, 'div', 'detail-body');
       if (row.annotation?.note) {
         const human = add(body, 'div', 'human-note');
-        add(human, 'strong', '', 'Human review');
+        add(human, 'strong', '', 'Reviewer note');
         add(human, 'div', '', row.annotation.note);
       }
       const notice = add(body, 'div', `notice ${row.selected ? '' : 'reject'}`);

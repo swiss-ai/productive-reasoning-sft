@@ -50,7 +50,7 @@ def main() -> None:
     html = template.replace("__REVIEW_TITLE__", title).replace("__REVIEW_DATA__", data)
     html = html.replace(
         "__REVIEW_SUBTITLE__",
-        "Manually reviewed examples from the retained rollouts. This is a curated demonstration, not a random sample or an accuracy estimate."
+        "Individually inspected examples from the retained rollouts. This is a curated demonstration, not a random sample or an accuracy estimate."
         if args.curation
         else "Every rollout is retained. Selection is the pipeline decision, not human approval.",
     )
