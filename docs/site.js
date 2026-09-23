@@ -47,7 +47,12 @@
     }
     if (markdown) {
       try {
-        parent.innerHTML = markdown.render(value);
+        // Markdown treats a multiline \[...\] block as escaped brackets;
+        // convert only standalone display delimiters before parsing.
+        const mathReady = value
+          .replace(/^[ \t]*\\\[[ \t]*$/gm, () => '\n$$')
+          .replace(/^[ \t]*\\\][ \t]*$/gm, () => '$$\n');
+        parent.innerHTML = markdown.render(mathReady);
         return;
       } catch (error) {
         console.warn('Markdown rendering failed; showing original text.', error);
