@@ -1,0 +1,101 @@
+# Human review labels for real saved rollouts. Only listed categories are scored;
+# omitted categories are not asserted to be clear. A draft case uses the original
+# teacher trace as reasoning and the saved polished response only as context.
+cases:
+  - id: decimal_draft_loop
+    dataset: runs/reasoning-productivity-debug-24-v2/candidates
+    sample_id_prefix: d870dbcef6a0
+    field: draft_generation
+    expected:
+      circular_rechecking: defect
+      no_new_progress: defect
+    note: Recomputes and reconfirms the same quotient over many late paragraphs after settling it.
+
+  - id: decimal_polished
+    dataset: runs/reasoning-productivity-debug-24-v2/candidates
+    sample_id_prefix: d870dbcef6a0
+    field: reasoning
+    expected:
+      repetition: clear
+      circular_rechecking: clear
+      no_new_progress: clear
+      unresolved_branch: clear
+    note: The cleaned arithmetic trace reaches the answer without revisiting settled results.
+
+  - id: jumble_draft_loop
+    dataset: runs/reasoning-gym-all-tasks-quality-v4/candidates
+    sample_id_prefix: fd0d30d19e1e
+    field: draft_generation
+    expected:
+      repetition: defect
+      circular_rechecking: defect
+      no_new_progress: defect
+    note: Repeatedly recounts the same eight letters and retries the same failed word guesses.
+
+  - id: jumble_polished
+    dataset: runs/reasoning-gym-all-tasks-quality-v4/candidates
+    sample_id_prefix: fd0d30d19e1e
+    field: reasoning
+    expected:
+      repetition: clear
+      circular_rechecking: clear
+      no_new_progress: clear
+      unresolved_branch: clear
+    note: Each listed word is a different subproblem and the trace finishes cleanly.
+
+  - id: palindrome_branches
+    dataset: runs/reasoning-gym-all-tasks-quality-v4/candidates
+    sample_id_prefix: 4bc20a03242a
+    field: reasoning
+    expected:
+      repetition: clear
+      circular_rechecking: clear
+      no_new_progress: clear
+    note: Exact repeated suffixes occur in distinct backtracking branches for different partitions.
+
+  - id: prime_count_enumeration
+    dataset: runs/reasoning-gym-all-tasks-quality-v4/candidates
+    sample_id_prefix: bc09f6c61e8a
+    field: draft_generation
+    expected:
+      repetition: clear
+      circular_rechecking: clear
+      no_new_progress: clear
+    note: It is long, but testing new integers advances the requested count.
+
+  - id: queens_branch_search
+    dataset: runs/reasoning-gym-all-tasks-quality-v4/candidates
+    sample_id_prefix: d427083536bb
+    field: draft_generation
+    expected:
+      circular_rechecking: clear
+      no_new_progress: clear
+      unresolved_branch: clear
+    note: Failed placements are distinct branches and the successful placement is checked once.
+
+  - id: survo_constraint_search
+    dataset: runs/reasoning-productivity-debug-24-v2/candidates
+    sample_id_prefix: dbf613e8f0b8
+    field: reasoning
+    expected:
+      circular_rechecking: clear
+      no_new_progress: clear
+      unresolved_branch: clear
+    note: Long casework narrows constraints and ends with an independent matrix check.
+
+  - id: unsupported_group_proof
+    dataset: runs/reasoning-productivity-debug-24-v2/candidates
+    sample_id_prefix: 129330cada64
+    field: reasoning
+    expected:
+      unresolved_branch: defect
+    note: The conclusion depends on a second case whose central existence claim is asserted, not established.
+
+  - id: smooth_rearrangement_proof
+    dataset: runs/reasoning-productivity-debug-24-v2/candidates
+    sample_id_prefix: 8d629d41e35e
+    field: reasoning
+    expected:
+      no_new_progress: clear
+      unresolved_branch: clear
+    note: The long counterexample develops a distribution-function argument to a closed conclusion.
