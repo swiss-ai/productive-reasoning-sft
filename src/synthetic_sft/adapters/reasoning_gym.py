@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import Counter
 from collections.abc import Iterator, Mapping
 from typing import Any
 
@@ -126,13 +127,12 @@ class ReasoningGymAdapter(SourceAdapter):
             return VerificationResult(score=None)
         try:
             verification = json.loads(str(payload))
+            if verification["source_dataset"] == "survo":
+                return _score_survo(response, verification["entry"])
             scorer = get_score_answer_fn(verification["source_dataset"])
             extracted = _extracted_candidates(record.get("answer_json"))
             candidates = extracted or _answer_candidates(response)
-            score = max(
-                float(scorer(candidate, verification["entry"]))
-                for candidate in candidates
-            )
+            score = max(float(scorer(candidate, verification["entry"])) for candidate in candidates)
             return VerificationResult(
                 score=min(1.0, max(0.0, score)),
                 details={
@@ -142,6 +142,79 @@ class ReasoningGymAdapter(SourceAdapter):
             )
         except Exception as exc:  # A broken source scorer must not lose the generated row.
             return VerificationResult(score=None, error=f"{type(exc).__name__}: {exc}")
+
+
+def _score_survo(response: str, entry: Mapping[str, Any]) -> VerificationResult:
+    """A Survo puzzle can have more than one valid completion."""
+    metadata = entry.get("metadata") or {}
+    puzzle = metadata.get("puzzle")
+    available = metadata.get("candidate_numbers")
+    if not isinstance(puzzle, list) or not isinstance(available, list):
+        return VerificationResult(
+            score=None, details={"method": "survo_constraints", "reason": "missing_metadata"}
+        )
+    size = len(puzzle)
+    if not size or any(not isinstance(row, list) or len(row) != size for row in puzzle):
+        return VerificationResult(
+            score=None, details={"method": "survo_constraints", "reason": "invalid_puzzle"}
+        )
+    matrix = _parse_integer_matrix(response, size)
+    if matrix is None:
+        return VerificationResult(
+            score=None, details={"method": "survo_constraints", "reason": "matrix_unavailable"}
+        )
+
+    filled = []
+    for row_index in range(size):
+        for column_index in range(size):
+            fixed = int(puzzle[row_index][column_index])
+            value = matrix[row_index][column_index]
+            if fixed and value != fixed:
+                return VerificationResult(
+                    score=0.0,
+                    details={"method": "survo_constraints", "reason": "fixed_cell_mismatch"},
+                )
+            if not fixed:
+                filled.append(value)
+    if Counter(filled) != Counter(map(int, available)):
+        return VerificationResult(
+            score=0.0,
+            details={"method": "survo_constraints", "reason": "number_multiset_mismatch"},
+        )
+    if any(sum(row[:-1]) != row[-1] for row in matrix[:-1]):
+        return VerificationResult(
+            score=0.0,
+            details={"method": "survo_constraints", "reason": "row_sum_mismatch"},
+        )
+    if any(
+        sum(matrix[row][column] for row in range(size - 1)) != matrix[-1][column]
+        for column in range(size - 1)
+    ):
+        return VerificationResult(
+            score=0.0,
+            details={"method": "survo_constraints", "reason": "column_sum_mismatch"},
+        )
+    return VerificationResult(score=1.0, details={"method": "survo_constraints"})
+
+
+def _parse_integer_matrix(text: str, size: int) -> list[list[int]] | None:
+    try:
+        parsed = json.loads(text)
+        if (
+            isinstance(parsed, list)
+            and len(parsed) == size
+            and all(isinstance(row, list) and len(row) == size for row in parsed)
+            and all(type(value) is int for row in parsed for value in row)
+        ):
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    rows = []
+    for line in text.splitlines():
+        numbers = line.strip().strip("|").replace(",", " ").split()
+        if len(numbers) == size and all(re.fullmatch(r"-?\d+", value) for value in numbers):
+            rows.append([int(value) for value in numbers])
+    return rows if len(rows) == size else None
 
 
 def _answer_candidates(response: str) -> list[str]:

@@ -34,12 +34,19 @@ _FOCUS = {
     ),
     "no_new_progress": (
         "Find a substantial continuation that neither advances the solution, resolves uncertainty, "
-        "nor adds a useful check. It may be fluent and non-repetitive. Do not penalize necessary "
-        "exploration or length by itself."
+        "nor adds a useful check. Compare early and late passages after a result is already "
+        "established: recomputing the same digits or retrying ruled-out guesses is a defect, "
+        "even if the trace eventually finds the answer. Do not penalize necessary exploration "
+        "or length by itself. Judge the visible work, not whether a draft later stops."
     ),
     "unresolved_branch": (
         "Find a material contradiction left unresolved, or a final conclusion that depends on "
-        "an abandoned or incomplete branch. A mistake that is explicitly corrected is not a defect."
+        "an abandoned or incomplete branch. An explicitly corrected mistake is not a defect. "
+        "This is NOT an answer-correctness check: do not infer a defect from a supposed "
+        "arithmetic, "
+        "letter-count, or constraint mismatch unless you have checked it exactly and can quote "
+        "incompatible statements from the trace. If a proof simply asserts its decisive theorem "
+        "without establishing or qualifying it, quote that assertion and the dependent conclusion."
     ),
 }
 
@@ -58,8 +65,9 @@ Return `defect` only for a material, directly observable instance. Quote one or 
 contiguous excerpts from the reasoning (or the final response for an unresolved branch) that prove
 it; explain why they show this specific failure. For repetition or circular re-checking, show both
 occurrences or quote an identical span that appears twice.
-Keep each excerpt under 120 characters and the explanation under 40 words. If you cannot quote
-the evidence exactly, return `uncertain`, not `defect`.
+Keep each excerpt under 120 characters and the explanation under 30 words. Every excerpt must be
+one contiguous substring of the supplied trace; do not join nonadjacent snippets, omit words, or
+paraphrase. If you cannot quote the evidence exactly, return `uncertain`, not `defect`.
 Return `clear` if you inspected the trace and found no such failure. Return `uncertain` if the
 available text cannot settle it. Never invent a quotation or claim to have inspected omitted text.
 The response must be only the requested JSON object.

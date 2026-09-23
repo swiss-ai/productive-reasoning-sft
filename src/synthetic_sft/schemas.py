@@ -221,8 +221,8 @@ HygieneCategory = Literal[
 
 class ModelHygieneAssessment(StrictModel):
     verdict: Literal["defect", "clear", "uncertain"]
-    evidence: list[str] = Field(default_factory=list, max_length=2)
-    explanation: str = Field(min_length=1, max_length=400)
+    evidence: list[str] = Field(max_length=2)
+    explanation: str = Field(min_length=1, max_length=240)
 
     @model_validator(mode="after")
     def defect_has_evidence(self) -> ModelHygieneAssessment:
