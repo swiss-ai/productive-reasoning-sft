@@ -74,6 +74,19 @@ FROM read_parquet('runs/reasoning-productivity-1000-v1/sft/**/*.parquet')
 GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 
+To inspect a pilot, make a self-contained review page and a compact index:
+
+```bash
+uv run python scripts/build_review_site.py runs/<run_id>/candidates runs/<run_id>/review/all.html
+uv run python scripts/review_digest.py runs/<run_id>/candidates runs/<run_id>/review/digest.md
+```
+
+The page shows the prompt, final answer, focused findings, verifier basis, judge feedback, and
+expandable full reasoning. For a meeting gallery, pass `--curation review.json` to the page builder;
+that JSON is a list of `{ "candidate_id": "...", "label": "...", "note": "..." }` entries, with
+an optional exact `excerpt` from the reasoning. A curated gallery is illustrative, not a measure
+of filter accuracy. Keep the full run for auditing false passes and false rejections.
+
 For the planned ablation, match prompts, effort, and training budget between the correctness-only
 and productivity-filtered SFT selections. Evaluate both checkpoints before RL and through the same
 short RL climb. Compare completed correct answers, reasoning-limit hits, repetition, reasoning
