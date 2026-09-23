@@ -219,7 +219,35 @@ def _answer_items(answer: Mapping[str, Any]) -> list[str]:
     if isinstance(values, list) and values:
         return [str(value).strip() for value in values if str(value).strip()]
     value = str(answer.get("value") or "").strip()
+    if answer.get("answer_type") == "set" and value:
+        for opening, closing in (
+            (r"\left\{", r"\right\}"),
+            (r"\{", r"\}"),
+            ("{", "}"),
+        ):
+            if value.startswith(opening) and value.endswith(closing):
+                value = value[len(opening) : -len(closing)].strip()
+                break
+        items = _split_top_level_commas(value)
+        if len(items) > 1:
+            return items
     return [value] if value else []
+
+
+def _split_top_level_commas(value: str) -> list[str]:
+    depth = 0
+    start = 0
+    items = []
+    for index, char in enumerate(value):
+        if char in "{([":
+            depth += 1
+        elif char in "})]":
+            depth -= 1
+        elif char == "," and depth == 0:
+            items.append(value[start:index].strip().removeprefix(r"\ ").strip())
+            start = index + 1
+    items.append(value[start:].strip().removeprefix(r"\ ").strip())
+    return [item for item in items if item]
 
 
 def _normalized_text(value: str) -> str:
