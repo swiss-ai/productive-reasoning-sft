@@ -16,6 +16,11 @@ cases:
     expectation: reject
     note: The literal condition is automatic and gives 144; leading with 400 answers an invented repair.
 
+  - id: speculative_trapezium_variant
+    sample_id_prefix: cf02ace15909
+    expectation: reject
+    note: The stated problem is underdetermined; changing angles into side lengths to give 45 is unrelated speculation.
+
   - id: alternative_survo_solution
     sample_id_prefix: dbf613e8f0b8
     expectation: pass
