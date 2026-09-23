@@ -30,6 +30,8 @@
     .eyebrow { color: #a8d4cb; font-size: 11px; letter-spacing: .13em; text-transform: uppercase; font-weight: 800; }
     h1 { font-size: clamp(24px, 3vw, 36px); margin: 5px 0 7px; letter-spacing: -.04em; line-height: 1.1; }
     .subtitle { color: #c9d6d4; margin: 0; font-size: 13px; max-width: 670px; }
+    .flow { color: #dbede7; font-size: 11px; font-weight: 700; letter-spacing: .01em; margin-top: 13px; }
+    .flow span { color: #8bc8b7; padding: 0 7px; }
     .stats { display: flex; gap: 9px; flex-wrap: wrap; justify-content: end; }
     .stat { min-width: 92px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); padding: 10px 13px; border-radius: 11px; }
     .stat strong { display: block; font-size: 23px; line-height: 1; }
@@ -59,6 +61,7 @@
     .detail { min-width: 0; overflow: hidden; }
     .detail-header { padding: 22px 26px 17px; border-bottom: 1px solid var(--line); }
     .detail-header h2 { font-size: 22px; letter-spacing: -.025em; margin: 8px 0 11px; }
+    .detail-source { color: var(--muted); font-size: 12px; margin: -5px 0 12px; }
     .idline { color: var(--muted); font: 11px ui-monospace, monospace; word-break: break-all; }
     .badge-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .detail-body { padding: 23px 26px 45px; max-width: 1100px; }
@@ -94,7 +97,7 @@
 </head>
 <body>
   <header class="top"><div class="top-inner">
-    <div><div class="eyebrow">Productive reasoning · evidence gallery</div><h1>__REVIEW_TITLE__</h1><p class="subtitle">__REVIEW_SUBTITLE__</p></div>
+    <div><div class="eyebrow">Productive reasoning · evidence gallery</div><h1>__REVIEW_TITLE__</h1><p class="subtitle">__REVIEW_SUBTITLE__</p><div class="flow">Teacher rollout <span>→</span> polished trace + answer <span>→</span> correctness + hygiene checks <span>→</span> SFT decision</div></div>
     <div class="stats" id="stats"></div>
   </div></header>
   <div class="workspace">
@@ -199,6 +202,7 @@
       const header = add(detail, 'div', 'detail-header');
       add(header, 'div', 'idline', `${row.sample_id} · candidate ${row.candidate_id}`);
       add(header, 'h2', '', row.annotation?.label || row.source);
+      if (row.annotation?.label) add(header, 'div', 'detail-source', row.source);
       const badges = add(header, 'div', 'badge-row');
       badges.appendChild(badge(row.selected ? 'Passed productivity filter' : 'Rejected by productivity filter', row.selected ? 'pass' : 'reject'));
       badges.appendChild(badge(`quality ${display(row.score)} / 5`, row.selected ? 'pass' : 'warn'));
