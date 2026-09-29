@@ -82,6 +82,7 @@ class OutputConfig(StrictModel):
 
 
 class SlurmConfig(StrictModel):
+    requeue: bool = True
     nodes: int = Field(default=1, gt=0)
     gpus_per_node: int = Field(default=4, gt=0)
     cpus_per_node: int = Field(default=288, gt=0)

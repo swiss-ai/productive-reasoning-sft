@@ -43,6 +43,7 @@ def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]
         command.append(f"--qos={slurm.qos}")
     if slurm.exclusive:
         command.append("--exclusive")
+    command.append("--requeue" if slurm.requeue else "--no-requeue")
     command.append(str(job_script))
     return command
 

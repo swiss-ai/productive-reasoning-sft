@@ -96,6 +96,9 @@ class VLLMBatchPredictor:
             "trust_remote_code": model.trust_remote_code,
             "enable_chunked_prefill": True,
             "enable_prefix_caching": model.enable_prefix_caching,
+            # All adapters currently emit text. Vision profiling on multimodal teachers
+            # can reserve tens of GiB/GPU and starve the actual text KV cache.
+            "limit_mm_per_prompt": {"image": 0, "video": 0},
             "seed": self.config.run.seed,
             "generation_config": "vllm",
             "disable_log_stats": False,
@@ -112,7 +115,9 @@ class VLLMBatchPredictor:
     def __call__(self, frame: pd.DataFrame) -> pd.DataFrame:
         if frame.empty:
             return frame
-        records = frame.to_dict(orient="records")
+        # Pandas string inference turns absent references into NaN. Preserve missing
+        # answers as None before verification (bool(NaN) would incorrectly mean present).
+        records = frame.astype(object).where(pd.notna(frame), None).to_dict(orient="records")
         if self.judge:
             self._quality(records)
             return pd.DataFrame.from_records(records)
@@ -178,6 +183,7 @@ class VLLMBatchPredictor:
         metric = {
             "event": "inference_phase",
             "phase": phase,
+            "candidate_ids": [str(row["candidate_id"]) for row, _ in results],
             "requests": requested,
             "completed": len(results),
             "seconds": round(time.perf_counter() - started, 4),
@@ -226,8 +232,19 @@ class VLLMBatchPredictor:
         self._extract_answers(records)
         # Structured extraction makes heterogeneous source answers safe for deterministic
         # comparison. Native source checkers may also use the extracted answer as a candidate.
+        verify_started = time.perf_counter()
         for row in records:
             self._parse_and_verify.verify(row)
+        print(
+            json.dumps(
+                {
+                    "event": "verification_phase",
+                    "rows": len(records),
+                    "seconds": round(time.perf_counter() - verify_started, 4),
+                }
+            ),
+            flush=True,
+        )
         self._run_critiques(records)
         self._arbitrate(records)
         self._retry_failed_arbitrations(records)

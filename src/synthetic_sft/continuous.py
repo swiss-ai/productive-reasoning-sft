@@ -106,7 +106,7 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
 
     def __call__(self, frame):
         """Yield completed rows while bounded workers continuously replenish the engine."""
-        records = iter(frame.to_dict(orient="records"))
+        records = iter(frame.astype(object).where(pd.notna(frame), None).to_dict(orient="records"))
         completed = []
         flushed_at = time.monotonic()
         with ThreadPoolExecutor(max_workers=self.config.model.inflight_candidates) as pool:
@@ -125,7 +125,11 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
                         pending.add(pool.submit(self._process_one, row))
                     # Use records instead of inferred one-row Arrow types: optional fields
                     # must have identical types across accepted and rejected candidates.
-                    completed.extend(result.to_dict(orient="records"))
+                    completed.extend(
+                        result.astype(object).where(pd.notna(result), None).to_dict(
+                            orient="records"
+                        )
+                    )
                 if (
                     len(completed) >= self.config.output.checkpoint_rows
                     or time.monotonic() - flushed_at >= self.config.output.checkpoint_seconds

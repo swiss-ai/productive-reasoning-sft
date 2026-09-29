@@ -1,0 +1,87 @@
+# Throughput/quality pilot; approve the smaller teacher only after inspecting its outputs.
+run:
+  run_id: reasoning-throughput-qwen36-128-v1
+  output_dir: ../runs
+  seed: 44
+  resume: true
+
+source:
+  adapter: pool
+  num_samples: 128
+  system_prompt: null
+  params:
+    sources:
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym/prompts"
+        weight: 0.25
+        difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/openmath/prompts"
+        weight: 0.35
+        subsets: [cot]
+        difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/deepmath/prompts"
+        weight: 0.25
+        difficulty_weights: {easy: 0.15, medium: 0.35, hard: 0.50}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/deepscaler/prompts"
+        weight: 0.10
+        difficulty_weights: {unknown: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/openthoughts/prompts"
+        weight: 0.05
+        domains: [math]
+        difficulty_weights: {unknown: 1.0}
+
+model:
+  model_source: /capstor/store/cscs/swissai/infra01/hf_models/models/Qwen/Qwen3.6-35B-A3B-FP8
+  execution: continuous
+  inflight_candidates: 32
+  dtype: auto
+  tensor_parallel_size: 1
+  max_model_len: 32768
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 64
+  max_num_batched_tokens: 8192
+  enable_prefix_caching: true
+  batch_size: 256
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 16384
+    # This model supports thinking but its template has no effort control.
+    reasoning_effort: null
+
+generation:
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 8192
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 256
+    max_tokens: 768
+    analysis_samples: 2
+    analysis_max_tokens: 2048
+    hygiene_max_tokens: 768
+    reasoning_effort: null
+    rubric_version: 10
+
+output:
+  parquet_target_mb: 64
+  compression: zstd
+  prepared_shards_per_gpu: 1
+  checkpoint_rows: 32
+  checkpoint_seconds: 60
+
+slurm:
+  nodes: 1
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "01:00:00"
+  partition: normal
+  account: infra01
+  qos: null
+  exclusive: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.6.sqsh"

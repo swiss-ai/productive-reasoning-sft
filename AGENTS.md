@@ -189,6 +189,28 @@ appropriate); do not assume high-priority/non-preemptible access. The September 
 investigation uses the current debug allocation and writes measurements under
 `runs/throughput-20260930-*`. The continuous execution path is initially opt-in while being
 validated on real rollouts. Original waves remain the comparison path.
+Slurm submissions request requeue by default (`slurm.requeue`); Ray rendezvous filenames include
+the Slurm restart count so a requeued worker cannot read the previous head's address.
+
+The initial systems audit found eight-candidate batches and whole-stage barriers starving the
+four-GPU teacher. Vision profiling also reserved ~35 GiB/GPU of peak activations despite text-only
+data, leaving ~4.5 GiB/GPU for KV cache in the first 64-sequence benchmark. Engine initialization
+now disables image/video inputs. A real no-reference prompt also exposed Pandas converting null
+references to NaN; generation now normalizes missing scalar values before calling verifiers.
+
+The smaller-teacher pilot is `configs/reasoning-throughput-128.yaml`: Qwen3.6-35B-A3B-FP8,
+four TP1 replicas on one node, with all quality checks. Its template supports thinking but does
+**not** support effort labels; use `reasoning_effort: null` rather than claiming xhigh control.
+Its quality must be reviewed before replacing the current teacher.
+
+Swiss Model Launcher manages vLLM/SGLang deployments; it is not a separate inference engine.
+The [serving leaderboard](https://serving.swissai.svc.cscs.ch/leaderboard) ranks token usage, and
+the performance page reports per-query speed, not sustained samples/GPU-hour. The published
+[DeepSeek V4.1 Flash recipe](https://github.com/swiss-ai/model-launch/blob/main/mfa_examples/clariden/deepseek-ai/DeepSeek-V4.1-Flash/vllm/DeepSeek-V4.1-Flash-vllm.sh)
+uses TP8/two nodes, with its throughput benchmark explicitly not run. Its locally available
+weights total ~510 GB. The BF16 Qwen3.5-397B weights total ~807 GB and the published recipe uses
+four nodes. Do not multiply a multi-GPU replica's sample rate by every GPU again. SML is a useful
+future deployment option, but changing serving frameworks does not fix an underfed client.
 
 Use a fresh `run_id` whenever the model, source, sampling, or quality policy changes; completed
 stages have manifests tied to the resolved config. `configs/reasoning-productivity-debug-24.yaml`

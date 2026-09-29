@@ -53,7 +53,8 @@ class RayCluster:
             raise RuntimeError("SLURM_JOB_ID is set but SLURM_JOB_NODELIST is unavailable")
         broadcast_dir = Path(os.environ.get("RAY_PORT_BROADCAST_DIR", self.run_dir / "cluster"))
         broadcast_dir.mkdir(parents=True, exist_ok=True)
-        port_file = broadcast_dir / f"ray_{os.environ['SLURM_JOB_ID']}.json"
+        restart = os.environ.get("SLURM_RESTART_COUNT", "0")
+        port_file = broadcast_dir / f"ray_{os.environ['SLURM_JOB_ID']}_{restart}.json"
         subprocess.run(["ray", "stop", "--force"], check=False, capture_output=True)
 
         if node_id == 0:

@@ -50,7 +50,8 @@ def candidate_table(records):
 def write_candidates(records, directory: Path, compression="zstd") -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"part-{uuid.uuid4().hex}.parquet"
-    temporary = path.with_suffix(".pending")
+    # Arrow ignores dot-prefixed files, including an interrupted but readable temp file.
+    temporary = path.with_name(f".{path.name}.pending")
     pq.write_table(candidate_table(records), temporary, compression=compression)
     temporary.replace(path)
     return path
