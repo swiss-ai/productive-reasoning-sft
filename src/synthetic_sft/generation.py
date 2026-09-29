@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import pandas as pd
@@ -94,13 +95,19 @@ class VLLMBatchPredictor:
             "max_num_seqs": model.max_num_seqs,
             "trust_remote_code": model.trust_remote_code,
             "enable_chunked_prefill": True,
+            "enable_prefix_caching": model.enable_prefix_caching,
             "seed": self.config.run.seed,
             "generation_config": "vllm",
             "disable_log_stats": False,
         }
         if model.revision:
             kwargs["revision"] = model.revision
-        self.llm = LLM(**kwargs)
+        if model.max_num_batched_tokens is not None:
+            kwargs["max_num_batched_tokens"] = model.max_num_batched_tokens
+        self.llm = self._create_engine(LLM, kwargs)
+
+    def _create_engine(self, engine_type, kwargs):
+        return engine_type(**kwargs)
 
     def __call__(self, frame: pd.DataFrame) -> pd.DataFrame:
         if frame.empty:
@@ -111,10 +118,7 @@ class VLLMBatchPredictor:
             return pd.DataFrame.from_records(records)
         messages = [self._messages(row) for row in records]
         sampling = [self._sampling(row, phase="draft") for row in records]
-        template_kwargs = {
-            "enable_thinking": True,
-            "reasoning_effort": self.config.model.sampling.reasoning_effort,
-        }
+        template_kwargs = self._thinking_kwargs(self.config.model.sampling.reasoning_effort)
         results = self._chat(records, messages, sampling, template_kwargs, phase="generation")
         for row, output in results:
             candidate = output.outputs[0]
@@ -137,6 +141,9 @@ class VLLMBatchPredictor:
         return pd.DataFrame.from_records(records)
 
     def _chat(self, records, messages, sampling, template_kwargs, *, phase: str):
+        if not records:
+            return []
+        started = time.perf_counter()
         try:
             outputs = self.llm.chat(
                 messages,
@@ -144,7 +151,7 @@ class VLLMBatchPredictor:
                 use_tqdm=False,
                 chat_template_kwargs=template_kwargs,
             )
-            return list(zip(records, outputs, strict=True))
+            results = list(zip(records, outputs, strict=True))
         except Exception as batch_error:
             results = []
             for row, row_messages, row_sampling in zip(records, messages, sampling, strict=True):
@@ -164,7 +171,21 @@ class VLLMBatchPredictor:
                     )
                     row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
                     row[f"batch_{prefix}_error"] = f"{type(batch_error).__name__}: {batch_error}"
-            return results
+        self._record_timing(phase, started, len(records), results)
+        return results
+
+    def _record_timing(self, phase, started, requested, results):
+        metric = {
+            "event": "inference_phase",
+            "phase": phase,
+            "requests": requested,
+            "completed": len(results),
+            "seconds": round(time.perf_counter() - started, 4),
+            "input_tokens": sum(len(out.prompt_token_ids or []) for _, out in results),
+            "output_tokens": sum(len(out.outputs[0].token_ids or []) for _, out in results),
+            "length_stops": sum(out.outputs[0].finish_reason == "length" for _, out in results),
+        }
+        print(json.dumps(metric), flush=True)
 
     def _polish(self, records: list[dict[str, Any]]) -> None:
         ready = [row for row in records if row.get("draft_generation")]
@@ -369,10 +390,7 @@ class VLLMBatchPredictor:
             requests,
             messages,
             sampling,
-            {
-                "enable_thinking": True,
-                "reasoning_effort": judge.reasoning_effort,
-            },
+            self._thinking_kwargs(judge.reasoning_effort),
             phase="critique",
         )
         analyses: list[list[tuple[int, str]]] = [[] for _ in records]
@@ -510,6 +528,13 @@ Scratch work:
             structured_outputs=self._structured_outputs_type(json=schema.model_json_schema()),
         )
 
+    @staticmethod
+    def _thinking_kwargs(effort):
+        kwargs = {"enable_thinking": True}
+        if effort is not None:
+            kwargs["reasoning_effort"] = effort
+        return kwargs
+
     def _token_count(self, text: str) -> int:
         return len(self.llm.get_tokenizer().encode(text, add_special_tokens=False))
 
@@ -546,20 +571,33 @@ Scratch work:
         )
 
 
-def build_vllm_processor(config: PipelineConfig, *, judge: bool, concurrency: int):
+def build_vllm_processor(
+    config: PipelineConfig, *, judge: bool, concurrency: int, checkpoint_dir=None
+):
     batch_size = config.quality.judge.batch_size if judge else config.model.batch_size
     config_payload = config.model_dump(mode="json")
 
     def process(dataset):
+        predictor = VLLMBatchPredictor
+        constructor = {"config": config_payload, "judge": judge}
+        if config.model.execution == "continuous":
+            from synthetic_sft.continuous import ContinuousVLLMPredictor
+
+            predictor = ContinuousVLLMPredictor
+            constructor["checkpoint_dir"] = str(checkpoint_dir) if checkpoint_dir else None
         return dataset.map_batches(
-            VLLMBatchPredictor,
+            predictor,
             batch_format="pandas",
             batch_size=batch_size,
             concurrency=(concurrency, concurrency),
             num_cpus=1,
             num_gpus=config.model.tensor_parallel_size,
             zero_copy_batch=False,
-            fn_constructor_kwargs={"config": config_payload, "judge": judge},
+            fn_constructor_kwargs=constructor,
+            # Durable outputs are resumed by candidate ID at the pipeline level. Avoid
+            # replaying a partially persisted actor task behind the driver's back.
+            max_restarts=0,
+            max_task_retries=0,
         )
 
     return process

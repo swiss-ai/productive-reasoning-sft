@@ -85,10 +85,21 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                 if completed_ids:
                     dataset = dataset.filter(ExcludeCandidateIds(completed_ids))
                 dataset = dataset.repartition(inference_blocks, shuffle=False)
-                generated = build_vllm_processor(config, judge=False, concurrency=replicas)(dataset)
-                generated.write_parquet(
-                    str(generated_path), compression=config.output.compression, mode="append"
-                )
+                streaming = config.model.execution == "continuous"
+                generated = build_vllm_processor(
+                    config,
+                    judge=False,
+                    concurrency=replicas,
+                    checkpoint_dir=generated_path if streaming else None,
+                )(dataset)
+                if streaming:
+                    # Actors atomically persist small completion groups themselves. Ray's
+                    # normal block buffering can otherwise withhold hours of durable output.
+                    generated.count()
+                else:
+                    generated.write_parquet(
+                        str(generated_path), compression=config.output.compression, mode="append"
+                    )
             written_ids = _candidate_ids(generated_path)
             if len(written_ids) != expected_candidates:
                 raise RuntimeError(

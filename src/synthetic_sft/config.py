@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import Field
@@ -30,10 +30,12 @@ class SamplingConfig(StrictModel):
     max_tokens: int = Field(default=8192, gt=0)
     presence_penalty: float = 0.0
     repetition_penalty: float = Field(default=1.0, gt=0.0)
-    reasoning_effort: str = Field(default="medium", pattern=r"^(low|medium|xhigh)$")
+    reasoning_effort: str | None = Field(default="medium", pattern=r"^(low|medium|high|xhigh)$")
 
 
 class ModelConfig(StrictModel):
+    execution: Literal["waves", "continuous"] = "waves"
+    inflight_candidates: int = Field(default=32, gt=0)
     model_source: str = "Qwen/Qwen3.8-27B"
     revision: str | None = None
     dtype: str = "bfloat16"
@@ -41,6 +43,8 @@ class ModelConfig(StrictModel):
     max_model_len: int = Field(default=16384, gt=0)
     gpu_memory_utilization: float = Field(default=0.90, gt=0.0, lt=1.0)
     max_num_seqs: int = Field(default=256, gt=0)
+    max_num_batched_tokens: int | None = Field(default=None, gt=0)
+    enable_prefix_caching: bool = True
     batch_size: int = Field(default=64, gt=0)
     trust_remote_code: bool = False
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
@@ -60,7 +64,7 @@ class JudgeConfig(StrictModel):
     analysis_samples: int = Field(default=2, ge=1, le=4)
     analysis_max_tokens: int = Field(default=2048, gt=0)
     hygiene_max_tokens: int = Field(default=768, gt=0)
-    reasoning_effort: str = Field(default="medium", pattern=r"^(low|medium|xhigh)$")
+    reasoning_effort: str | None = Field(default="medium", pattern=r"^(low|medium|high|xhigh)$")
     rubric_version: int = Field(default=4, ge=1)
 
 
@@ -70,6 +74,8 @@ class QualityConfig(StrictModel):
 
 
 class OutputConfig(StrictModel):
+    checkpoint_rows: int = Field(default=32, gt=0)
+    checkpoint_seconds: float = Field(default=60.0, gt=0)
     parquet_target_mb: int = Field(default=384, ge=64)
     compression: str = "zstd"
     prepared_shards_per_gpu: int = Field(default=4, gt=0)

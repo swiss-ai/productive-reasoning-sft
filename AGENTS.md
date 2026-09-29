@@ -83,6 +83,16 @@ source pools / prepared prompts
   extraction, parallel critiques, arbitration, and the four focused checks. It records exact
   teacher-tokenizer counts for reasoning and final response. Same-model judging shares the loaded
   actor; a different judge `model_source` uses a separate actor.
+- `continuous.py`: optional `model.execution: continuous` execution using one AsyncLLM per
+  replica and bounded independent trajectories. It reuses every generation/quality stage and
+  lets ready requests enter the engine without waiting for unrelated long trajectories.
+- `storage.py`: fixed candidate Parquet schema and atomic completion checkpoints. Continuous
+  generation writes completed groups (`output.checkpoint_rows`, or `checkpoint_seconds`)
+  directly, avoiding Ray's large output-block buffering. Actor retries are disabled; resume
+  skips durable candidate IDs. In-flight work can still be lost on preemption.
+- `scripts/benchmark_pipeline.py`: full-pipeline measurements on saved real prompts, including
+  polishing and all judges. Saves outputs and per-stage request/token timings. Continuous
+  request durations overlap; do not sum them as GPU wall time.
 - `quality.py`: parse reasoning/response, check answer with the source adapter, combine the
   correctness verdict, 1–5 quality, hygiene, and selection flags.
 - `hygiene.py`: category-specific critical prompts, exact-evidence validation, bounded repeated
@@ -173,6 +183,12 @@ automatically an approved teacher. Effort comparisons use separate runs. Long-co
 tail GLM-5.2 via Swiss Model Launcher remains future work, not a dependency for the current pilot.
 
 ## Run and inspect
+
+There is no reservation now. Use ordinary Slurm allocations (`normal`, or `preemptable` when
+appropriate); do not assume high-priority/non-preemptible access. The September 30 throughput
+investigation uses the current debug allocation and writes measurements under
+`runs/throughput-20260930-*`. The continuous execution path is initially opt-in while being
+validated on real rollouts. Original waves remain the comparison path.
 
 Use a fresh `run_id` whenever the model, source, sampling, or quality policy changes; completed
 stages have manifests tied to the resolved config. `configs/reasoning-productivity-debug-24.yaml`
