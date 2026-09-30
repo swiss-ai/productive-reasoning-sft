@@ -2,7 +2,7 @@
 
 The server owns chat rendering (important for DeepSeek's specialized encoder).
 Usage counts are represented by ranges, not claimed to be actual token IDs.
-No automatic transport retries: an infrastructure error must not become a math reject.
+Transient transport failures receive bounded retries and remain explicit row errors if exhausted.
 """
 
 from __future__ import annotations
@@ -59,6 +59,8 @@ class EndpointPredictor(ContinuousVLLMPredictor):
         return SimpleNamespace(get_tokenizer=lambda: counter)
 
     def _chat(self, records, messages, sampling, template_kwargs, *, phase):
+        import httpx
+
         if not records:
             return []
         started = time.perf_counter()
@@ -72,8 +74,36 @@ class EndpointPredictor(ContinuousVLLMPredictor):
                 model=self.config.model.endpoint.served_model_name,
                 messages=conversation, chat_template_kwargs=template_kwargs,
             )
-            response = self._client.post("chat/completions", json=payload)
-            response.raise_for_status()
+            response = None
+            for attempt in range(3):
+                try:
+                    response = self._client.post("chat/completions", json=payload)
+                    response.raise_for_status()
+                    break
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code not in {429, 500, 502, 503, 504}:
+                        raise
+                    if attempt == 2:
+                        prefix = (
+                            "generation"
+                            if phase in {"generation", "polish"}
+                            else "judge_generation"
+                        )
+                        row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
+                        return None
+                    time.sleep(2**attempt)
+                except httpx.TransportError as exc:
+                    if attempt == 2:
+                        prefix = (
+                            "generation"
+                            if phase in {"generation", "polish"}
+                            else "judge_generation"
+                        )
+                        row[f"{prefix}_error"] = f"{type(exc).__name__}: {exc}"
+                        return None
+                    time.sleep(2**attempt)
+            if response is None:
+                raise RuntimeError("endpoint request completed without a response")
             result = response.json()
             choice = result["choices"][0]
             message = choice["message"]
@@ -97,6 +127,7 @@ class EndpointPredictor(ContinuousVLLMPredictor):
             for row, conversation, params in zip(records, messages, sampling, strict=True)
         ]
         results = [future.result() for future in futures]
+        results = [result for result in results if result is not None]
         self._record_timing(phase, started, len(records), results)
         return results
 
