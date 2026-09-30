@@ -106,18 +106,25 @@ class CorrectnessAssessment(StrictModel):
     def verdict_does_not_contradict_feedback(self) -> CorrectnessAssessment:
         feedback = self.feedback.casefold()
         candidate_correct = re.search(
-            r"candidate(?:'s)? (?:final )?answer [^\n]{0,150}?\b(?:is|was) "
+            r"candidate(?:'s)? (?:final )?answer [^.!?;\n]{0,120}?\b(?:is|was) "
             r"(?:mathematically )?correct\b",
             feedback,
         )
         candidate_incorrect = re.search(
-            r"candidate(?:'s)? (?:final )?answer [^\n]{0,150}?\b(?:is|was) incorrect\b",
+            r"candidate(?:'s)? (?:final )?answer [^.!?;\n]{0,120}?\b(?:is|was) incorrect\b",
+            feedback,
+        )
+        reference_incorrect = re.search(
+            r"(?:reference|source)(?: answer)? [^.!?;\n]{0,120}?\b(?:is|was) "
+            r"(?:demonstrably )?(?:incorrect|wrong|false)\b",
             feedback,
         )
         if self.verdict == "incorrect" and candidate_correct:
             raise ValueError("incorrect verdict contradicts feedback that the candidate is correct")
         if self.verdict in {"correct", "reference_conflict"} and candidate_incorrect:
             raise ValueError("correct verdict contradicts feedback that the candidate is incorrect")
+        if self.verdict == "correct" and reference_incorrect:
+            raise ValueError("correct verdict must be reference_conflict when feedback rejects the reference")
         return self
 
 
