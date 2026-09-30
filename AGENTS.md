@@ -147,12 +147,21 @@ The same Parquet rows support alternative downstream thresholds; there is no per
 
 ## Initial sources, composition, and profiles
 
+**Current sourcing decision (September 30): use easy tasks only for the next RL-priming
+dataset, with no demanding-task slice.** The objective is demonstrating useful reasoning,
+appropriate checking, a complete answer, and stopping—not maximizing SFT math capability.
+Selected NuminaMath-CoT school-math problems are the proposed new math pool; retain manageable,
+verifiable logic/puzzles from Reasoning Gym. Existing worked solutions must still be checked.
+Do not enforce shortness at the expense of necessary steps. This supersedes the hard-tilted
+sampling recommendation below; the existing configs and active throughput benchmark still use
+the historical mix and have not been changed to implement the new source selection.
+
 The reusable pools include [Reasoning Gym](https://github.com/open-thought/reasoning-gym),
 [NVIDIA OpenMathReasoning](https://huggingface.co/datasets/nvidia/OpenMathReasoning),
 [DeepMath-103K](https://huggingface.co/datasets/zwhe99/DeepMath-103K),
 [DeepScaleR Preview](https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset),
 and [OpenThoughts3-1.2M](https://huggingface.co/datasets/open-thoughts/OpenThoughts3-1.2M).
-The current 1,000-prompt pilot weights are 25% Reasoning Gym, 35% OpenMath, 25% DeepMath, 10%
+The historical 1,000-prompt pilot weights are 25% Reasoning Gym, 35% OpenMath, 25% DeepMath, 10%
 DeepScaleR, and 5% OpenThoughts math. Within sources that have useful difficulty bands, sample
 15% easy, 35% medium, and 50% hard. This is a mild hard tilt, not a hard-only curriculum;
 source-native difficulty labels are not globally comparable. The small debug config uses the same
