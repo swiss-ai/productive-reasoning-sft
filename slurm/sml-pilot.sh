@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run the SML service and the CPU pipeline client in one bounded allocation.
+# Keep the SML service available for multiple experiments within one allocation.
 set -euo pipefail
 ulimit -c 0
 config=$1
@@ -34,8 +34,12 @@ run_client() {
 }
 run_client > "$run_dir/logs/client.out" 2> "$run_dir/logs/client.err" &
 client_pid=$!
-wait -n "$serving_pid" "$client_pid"
+first_status=0
+wait -n "$serving_pid" "$client_pid" || first_status=$?
 if kill -0 "$client_pid" 2>/dev/null; then
     echo "SML service exited before the pipeline client completed" >&2
     exit 1
 fi
+client_pid=""
+echo "Initial client finished (exit $first_status). Keeping SML available at $SFT_API_BASE until allocation ends or explicit cancellation."
+wait "$serving_pid"

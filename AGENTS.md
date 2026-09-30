@@ -380,7 +380,8 @@ disable thinking. Context/output are bounded at 32K/16K for this pilot, not the 
 full-capacity evaluation settings. Transport errors fail the run, never become math failures;
 completed groups remain in Parquet. Benchmark output directories are fresh-only, not resumable.
 Rates must count all eight GPUs/two nodes and distinguish server startup from warm generation.
-Cancel the serving job after measurement; do not leave it idle. No DeepSeek throughput or
+Keep the serving job available across experiments within its allocation; do not restart the
+model after each bounded measurement. Cancel when the experiment session is finished. No DeepSeek throughput or
 quality claim is established yet.
 
 The first SML launch stalled in weight materialization from Lustre. The running vLLM image
@@ -425,8 +426,11 @@ reader and shared OS cache. Job 3548993 is that corrected, bounded retry, submit
 The renderer now accepts `--seeds SAVED_SEEDS` and emits a `pilot.sh` allocation script as well
 as `master.sh`. Submit **pilot.sh** for a single-job trial: `slurm/sml-pilot.sh` starts SML and
 a CPU client in the same allocation, runs the real API probes followed by the 64-prompt
-benchmark, and exits on either client completion/failure or an early serving failure. Slurm
-then releases all resources. Client logs are `runs/<id>/logs/client.{out,err}`; serving logs
+benchmark, and keeps serving after the initial client completes or fails so subsequent clients
+can reuse the endpoint. A serving failure or the allocation time limit still ends the job.
+This lifecycle change applies to newly launched wrappers; job 3548993 started with the old
+client-completion shutdown and must not be assumed to have adopted a live script edit.
+Client logs are `runs/<id>/logs/client.{out,err}`; serving logs
 remain `logs/<job>/replica_0.*`; raw probes and completed candidate groups stay under the run.
 The initial endpoint probes were restarted before inference to use explicit effort 100.
 
