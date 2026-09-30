@@ -124,7 +124,7 @@ ResponseIssue = Literal[
 
 class ReasoningAssessment(StrictModel):
     score: int = Field(ge=1, le=5)
-    issues: list[ReasoningIssue] = Field(default_factory=list)
+    issues: list[ReasoningIssue]
     feedback: str = Field(min_length=1, max_length=300)
 
     @field_validator("issues", mode="before")
@@ -143,7 +143,7 @@ class ReasoningAssessment(StrictModel):
 
 class ResponseAssessment(StrictModel):
     score: int = Field(ge=1, le=5)
-    issues: list[ResponseIssue] = Field(default_factory=list)
+    issues: list[ResponseIssue]
     feedback: str = Field(min_length=1, max_length=300)
 
     @field_validator("issues", mode="before")

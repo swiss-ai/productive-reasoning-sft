@@ -509,6 +509,9 @@ class VLLMBatchPredictor:
             if '"response"' in original:
                 prompt = (
                     "Repair this malformed judge JSON. Preserve its verdicts and scores. "
+                    "Add every schema-required key: reasoning and response each need an "
+                    "issues array, empty only for score 5 and otherwise containing a matching "
+                    "issue code. "
                     "Use brief plain-English feedback without TeX, backslashes, or internal "
                     "quotation marks. Return only one complete JSON object matching the "
                     "original keys.\n\nMalformed JSON:\n" + original[:8000]
