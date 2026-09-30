@@ -368,11 +368,14 @@ Rates must count all eight GPUs/two nodes and distinguish server startup from wa
 Cancel the serving job after measurement; do not leave it idle. No DeepSeek throughput or
 quality claim is established yet.
 
-The first SML launch spends roughly 20 minutes reading weights from Lustre. The running
-vLLM image defaults to mmap loading (automatic prefetch applies to NFS, not Lustre).
-For the next cold-start comparison, try `--safetensors-load-strategy eager`, which reads each
-shard into CPU RAM up front; this is [vLLM's recommended network-filesystem strategy](https://github.com/vllm-project/vllm/blob/v0.30.0/vllm/config/load.py).
-It has not been benchmarked here and must not be reported as an achieved speedup.
+The first SML launch stalled in weight materialization from Lustre. The running vLLM image
+defaults to mmap loading. Its actual `weight_utils.py` recognizes **both NFS and Lustre** for
+automatic prefetch, gated on checkpoint size fitting within 90% of available RAM; the
+`config/load.py` docstring mentioning only NFS is incomplete. The driver's logs do not establish
+whether that heuristic activated. The retry uses `--safetensors-load-strategy eager`, reading
+each shard into CPU RAM up front, following [vLLM's network-filesystem guidance](https://github.com/vllm-project/vllm/blob/v0.30.0/vllm/config/load.py).
+This has not yet been measured here and must not be reported as an achieved speedup. The two
+Engram shards are about 102 GB each, so monitor host-memory peaks during eager deserialization.
 
 Update at ~04:12 CEST: the debug attempt was cancelled deliberately after over 30 minutes
 without a ready endpoint. No inference result exists from it. Its shard iterator reached 100%
@@ -393,6 +396,8 @@ At 04:13, `normal` was blocked by `QOSGrpNodeLimit`; the pending job was moved i
 `preemptable`, and the checked-in config now requests that partition. The generated historical
 SBATCH header still says normal; the live Slurm allocation is authoritative. No reservation
 or elevated QOS was requested.
+The retry started at **04:14:16 CEST** on `nid006144,nid007009`; Slurm confirms 800 GiB RAM
+per node and all eight GPUs allocated. No DeepSeek inference result was available at 04:17.
 
 The renderer now accepts `--seeds SAVED_SEEDS` and emits a `pilot.sh` allocation script as well
 as `master.sh`. Submit **pilot.sh** for a single-job trial: `slurm/sml-pilot.sh` starts SML and
