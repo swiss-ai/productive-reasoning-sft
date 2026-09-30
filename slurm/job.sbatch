@@ -18,4 +18,6 @@ trap requeue_before_timeout USR1
 srun \
   --ntasks-per-node=1 \
   --environment="$SFT_ENVIRONMENT" \
-  bash -lc "cd '$SFT_PROJECT_DIR' && python -m synthetic_sft.cli run '$SFT_CONFIG'"
+  bash -lc "cd '$SFT_PROJECT_DIR' && python -m synthetic_sft.cli run '$SFT_CONFIG'" &
+srun_pid=$!
+wait "$srun_pid"
