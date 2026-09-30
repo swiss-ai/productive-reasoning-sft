@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import os
 import threading
 import time
 import uuid
@@ -32,6 +33,8 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
         from vllm import AsyncEngineArgs
         from vllm.v1.engine.async_llm import AsyncLLM
 
+        # Never fork CUDA workers from the orchestration event-loop thread.
+        os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
@@ -53,14 +56,18 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
         tokenizer = self.llm.get_tokenizer()
         prompts = [
             tokenizer.apply_chat_template(
-                conversation, tokenize=True, add_generation_prompt=True, **template_kwargs
+                conversation,
+                tokenize=True,
+                return_dict=False,
+                add_generation_prompt=True,
+                **template_kwargs,
             )
             for conversation in messages
         ]
 
         async def request(row, prompt, params):
             from vllm.sampling_params import RequestOutputKind
-            from vllm.v1.engine.exceptions import EngineDeadError
+            from vllm.v1.engine.exceptions import EngineDeadError, EngineGenerateError
 
             params.output_kind = RequestOutputKind.FINAL_ONLY
             request_id = f"{row['candidate_id']}:{phase}:{uuid.uuid4().hex}"
@@ -73,7 +80,8 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
                 if result is None:
                     raise RuntimeError("engine returned no final output")
                 return row, result
-            except EngineDeadError:
+            except (EngineDeadError, EngineGenerateError):
+                # Engine/transport bugs are run failures, not low-quality math samples.
                 raise
             except Exception as exc:
                 prefix = "generation" if phase in {"generation", "polish"} else "judge_generation"
@@ -126,9 +134,9 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
                     # Use records instead of inferred one-row Arrow types: optional fields
                     # must have identical types across accepted and rejected candidates.
                     completed.extend(
-                        result.astype(object).where(pd.notna(result), None).to_dict(
-                            orient="records"
-                        )
+                        result.astype(object)
+                        .where(pd.notna(result), None)
+                        .to_dict(orient="records")
                     )
                 if (
                     len(completed) >= self.config.output.checkpoint_rows

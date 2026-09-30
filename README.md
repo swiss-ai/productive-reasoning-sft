@@ -54,6 +54,16 @@ uv run synthetic-sft submit configs/reasoning-gym-smoke.yaml
 The YAML controls the source, model, number of rollouts, judging, output location, and
 Slurm resources. A single submission uses every requested node and GPU.
 
+For throughput experiments, `configs/reasoning-throughput-128.yaml` runs a smaller Qwen3.6
+teacher on four independent GPUs. It keeps the same polishing and quality checks; inspect its
+outputs before choosing it for production. The original large-teacher profile remains available.
+
+`model.execution: continuous` lets each rollout move into polishing and review as soon as it is
+ready, while other problems continue generating. `model.inflight_candidates` controls how many
+trajectories each replica works on at once. Completed candidates are saved in small groups, so an
+interruption does not lose a whole large batch. Use `normal` or `preemptable` in `slurm.partition`;
+submissions request requeue by default. Resume uses the same configuration and skips saved work.
+
 ## Results
 
 Each run is written under `output_dir/run_id`:

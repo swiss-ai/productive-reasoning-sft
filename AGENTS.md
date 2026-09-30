@@ -193,9 +193,10 @@ Slurm submissions request requeue by default (`slurm.requeue`); Ray rendezvous f
 the Slurm restart count so a requeued worker cannot read the previous head's address.
 
 The initial systems audit found eight-candidate batches and whole-stage barriers starving the
-four-GPU teacher. Vision profiling also reserved ~35 GiB/GPU of peak activations despite text-only
-data, leaving ~4.5 GiB/GPU for KV cache in the first 64-sequence benchmark. Engine initialization
-now disables image/video inputs. A real no-reference prompt also exposed Pandas converting null
+four-GPU teacher. The 8,192-token prefill configuration reserved ~35 GiB/GPU of peak activations,
+leaving ~4.5 GiB/GPU for KV cache in the first 64-sequence benchmark. Disabling unused image/video
+inputs raised that to only ~5 GiB; vision was not the main cause. A real no-reference prompt also
+exposed Pandas converting null
 references to NaN; generation now normalizes missing scalar values before calling verifiers.
 
 The smaller-teacher pilot is `configs/reasoning-throughput-128.yaml`: Qwen3.6-35B-A3B-FP8,

@@ -38,7 +38,7 @@ model:
   max_model_len: 32768
   gpu_memory_utilization: 0.90
   max_num_seqs: 64
-  max_num_batched_tokens: 8192
+  max_num_batched_tokens: 4096
   enable_prefix_caching: true
   batch_size: 256
   sampling:
@@ -46,6 +46,8 @@ model:
     top_p: 0.95
     top_k: 20
     max_tokens: 16384
+    # The model card's general thinking preset (separate from the teacher comparison).
+    presence_penalty: 1.5
     # This model supports thinking but its template has no effort control.
     reasoning_effort: null
 

@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[8, 32])
     parser.add_argument("--max-num-seqs", type=int, default=64)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=8192)
     parser.add_argument("--execution", choices=["waves", "continuous"], default="waves")
     parser.add_argument("--inflight", type=int, default=32)
     parser.add_argument("--model")
@@ -46,7 +47,7 @@ def main():
         config.model.sampling.reasoning_effort = None if args.effort == "none" else args.effort
         if args.effort == "none":
             config.quality.judge.reasoning_effort = None
-    config.model.max_num_batched_tokens = 8192
+    config.model.max_num_batched_tokens = args.max_num_batched_tokens
     (args.output / "config.json").write_text(config.model_dump_json(indent=2))
     seeds = ds.dataset(args.seeds, format="parquet").to_table().to_pylist()
     if not 0 <= args.shard_index < args.shards:
@@ -93,8 +94,11 @@ def main():
                 all_rows.extend(result.to_dict(orient="records"))
         elapsed = time.perf_counter() - started
         eligible = sum(bool(row["productivity_filtered_eligible"]) for row in all_rows)
+        generated = sum(bool(row.get("draft_generation")) for row in all_rows)
+        complete = sum(row.get("generation_status") == "ok" for row in all_rows)
         summary = {
             "event": "benchmark",
+            "valid": generated > 0,
             "model": config.model.model_source,
             "execution": config.model.execution,
             "gpus": config.model.tensor_parallel_size,
@@ -105,6 +109,9 @@ def main():
             "samples": len(all_rows),
             "seconds": elapsed,
             "samples_per_hour": len(all_rows) * 3600 / elapsed,
+            "generated": generated,
+            "complete": complete,
+            "complete_per_hour": complete * 3600 / elapsed,
             "eligible": eligible,
             "eligible_per_hour": eligible * 3600 / elapsed,
             "scores": dict(Counter(str(row["quality_score"]) for row in all_rows)),
@@ -112,6 +119,10 @@ def main():
         }
         (target / "summary.json").write_text(json.dumps(summary, indent=2))
         print(json.dumps(summary), flush=True)
+        if not generated:
+            raise RuntimeError(
+                "no successful generations; this is not a valid throughput benchmark"
+            )
     if hasattr(predictor, "close"):
         predictor.close()
 

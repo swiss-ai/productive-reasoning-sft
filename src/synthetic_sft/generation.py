@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any
 
@@ -27,6 +28,8 @@ from synthetic_sft.quality import (
     split_reasoning,
 )
 from synthetic_sft.schemas import AnswerExtraction, JudgeScores, ModelHygieneAssessment
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class FanOutCandidates:
@@ -191,7 +194,7 @@ class VLLMBatchPredictor:
             "output_tokens": sum(len(out.outputs[0].token_ids or []) for _, out in results),
             "length_stops": sum(out.outputs[0].finish_reason == "length" for _, out in results),
         }
-        print(json.dumps(metric), flush=True)
+        _LOGGER.warning(json.dumps(metric))
 
     def _polish(self, records: list[dict[str, Any]]) -> None:
         ready = [row for row in records if row.get("draft_generation")]
@@ -235,15 +238,14 @@ class VLLMBatchPredictor:
         verify_started = time.perf_counter()
         for row in records:
             self._parse_and_verify.verify(row)
-        print(
+        _LOGGER.warning(
             json.dumps(
                 {
                     "event": "verification_phase",
                     "rows": len(records),
                     "seconds": round(time.perf_counter() - verify_started, 4),
                 }
-            ),
-            flush=True,
+            )
         )
         self._run_critiques(records)
         self._arbitrate(records)
