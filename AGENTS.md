@@ -193,16 +193,33 @@ Slurm submissions request requeue by default (`slurm.requeue`); Ray rendezvous f
 the Slurm restart count so a requeued worker cannot read the previous head's address.
 
 The initial systems audit found eight-candidate batches and whole-stage barriers starving the
-four-GPU teacher. The 8,192-token prefill configuration reserved ~35 GiB/GPU of peak activations,
-leaving ~4.5 GiB/GPU for KV cache in the first 64-sequence benchmark. Disabling unused image/video
-inputs raised that to only ~5 GiB; vision was not the main cause. A real no-reference prompt also
-exposed Pandas converting null
+four-GPU teacher. Profiling reserved ~35 GiB/GPU of peak activations, leaving ~4.5 GiB/GPU for
+KV cache in the first 64-sequence benchmark. Disabling unused image/video inputs raised that to
+only ~5 GiB, and reducing prefill from 8,192 to 4,096 tokens raised it to ~5.3 GiB. Neither change
+explains or eliminates the large reservation; do not claim a major memory gain from them.
+A real no-reference prompt also exposed Pandas converting null
 references to NaN; generation now normalizes missing scalar values before calling verifiers.
 
 The smaller-teacher pilot is `configs/reasoning-throughput-128.yaml`: Qwen3.6-35B-A3B-FP8,
 four TP1 replicas on one node, with all quality checks. Its template supports thinking but does
 **not** support effort labels; use `reasoning_effort: null` rather than claiming xhigh control.
 Its quality must be reviewed before replacing the current teacher.
+
+The first valid continuous large-teacher measurement completed 64 real mixed-source candidates
+in 705.6 seconds after 306.8 seconds of engine startup: 326.5 candidates/hour/node, with 40
+pipeline-eligible rows (204.1 eligible/hour). Including startup gives 227.6 candidates/hour.
+Results: `runs/throughput-20260930-continuous-v2/batch-64/summary.json`. All inference requests
+returned; two polished outputs lacked a complete response. Output-token shares were ~60% draft,
+28% broad critiques, 7.5% polish, and 1.8% focused hygiene. The 23 capped drafts and 93/128 capped
+critique calls make budgets and critic behavior worth investigating, not automatically shortening.
+These are warm finite-batch measurements, not a matched speedup or a calibrated useful-yield
+estimate. The earlier `continuous` directory is explicitly invalid (a prompt-tokenization bug
+caused every request to fail); never report its apparent samples/hour as throughput.
+
+Continuous actors now log engine statistics every ten seconds. Small pilots and resumed tails
+bound the Ray batch size to leave work for every active replica; otherwise Ray can combine all
+small blocks into one large batch and leave the other GPUs idle. The 128-prompt pilot uses
+32-row actor batches; production needs larger batches to amortize long-tail draining.
 
 Swiss Model Launcher manages vLLM/SGLang deployments; it is not a separate inference engine.
 The [serving leaderboard](https://serving.swissai.svc.cscs.ch/leaderboard) ranks token usage, and

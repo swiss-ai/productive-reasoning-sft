@@ -91,6 +91,7 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                     judge=False,
                     concurrency=replicas,
                     checkpoint_dir=generated_path if streaming else None,
+                    candidate_count=remaining,
                 )(dataset)
                 if streaming:
                     # Actors atomically persist small completion groups themselves. Ray's
@@ -136,9 +137,14 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                     )
                 )
                 if config.quality.judge.enabled:
-                    candidates = build_vllm_processor(config, judge=True, concurrency=replicas)(
-                        candidates
-                    )
+                    candidates = build_vllm_processor(
+                        config,
+                        judge=True,
+                        concurrency=replicas,
+                        candidate_count=(
+                            config.source.num_samples * config.generation.rollouts_per_prompt
+                        ),
+                    )(candidates)
                 candidates = candidates.map(FinalizeQuality(config.model_dump(mode="json")))
             candidates.write_parquet(str(candidates_path), compression=config.output.compression)
             _mark_stage(config, "candidates", candidates_path, stage_started)

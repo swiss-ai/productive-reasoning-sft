@@ -52,7 +52,10 @@ def submit(config: PipelineConfig, config_path: Path, *, dry_run: bool = False) 
     command = build_sbatch_command(config, config_path)
     if dry_run:
         return " ".join(command)
-    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    environment = os.environ.copy()
+    # A stale shell setting from the old reservation must not change this launch.
+    environment.pop("SBATCH_RESERVATION", None)
+    result = subprocess.run(command, check=False, capture_output=True, text=True, env=environment)
     if result.returncode:
         message = result.stderr.strip() or result.stdout.strip() or "unknown Slurm error"
         raise RuntimeError(f"sbatch failed: {message}")

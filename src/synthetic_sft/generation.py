@@ -99,8 +99,7 @@ class VLLMBatchPredictor:
             "trust_remote_code": model.trust_remote_code,
             "enable_chunked_prefill": True,
             "enable_prefix_caching": model.enable_prefix_caching,
-            # All adapters currently emit text. Vision profiling on multimodal teachers
-            # can reserve tens of GiB/GPU and starve the actual text KV cache.
+            # All adapters currently emit text; skip unused multimodal profiling.
             "limit_mm_per_prompt": {"image": 0, "video": 0},
             "seed": self.config.run.seed,
             "generation_config": "vllm",
@@ -591,9 +590,15 @@ Scratch work:
 
 
 def build_vllm_processor(
-    config: PipelineConfig, *, judge: bool, concurrency: int, checkpoint_dir=None
+    config: PipelineConfig, *, judge: bool, concurrency: int, checkpoint_dir=None,
+    candidate_count: int | None = None,
 ):
     batch_size = config.quality.judge.batch_size if judge else config.model.batch_size
+    if candidate_count is not None:
+        concurrency = min(concurrency, max(1, candidate_count))
+        # Ray can bundle small blocks to meet batch_size, leaving most replicas idle.
+        # Bound pilot/resume batches so there is work for every allocated replica.
+        batch_size = min(batch_size, max(1, candidate_count // concurrency))
     config_payload = config.model_dump(mode="json")
 
     def process(dataset):

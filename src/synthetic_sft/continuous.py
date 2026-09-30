@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextlib import suppress
 from pathlib import Path
 
 import pandas as pd
@@ -40,7 +41,15 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
         self._thread.start()
 
         async def create():
-            return AsyncLLM.from_engine_args(AsyncEngineArgs(**kwargs))
+            engine = AsyncLLM.from_engine_args(AsyncEngineArgs(**kwargs))
+
+            async def log_stats():
+                while True:
+                    await asyncio.sleep(10)
+                    await engine.do_log_stats()
+
+            self._stats_task = asyncio.create_task(log_stats())
+            return engine
 
         try:
             return asyncio.run_coroutine_threadsafe(create(), self._loop).result()
@@ -155,6 +164,9 @@ class ContinuousVLLMPredictor(VLLMBatchPredictor):
 
     def close(self):
         async def shutdown():
+            self._stats_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._stats_task
             self.llm.shutdown()
 
         asyncio.run_coroutine_threadsafe(shutdown(), self._loop).result()
