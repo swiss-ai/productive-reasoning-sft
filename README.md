@@ -6,9 +6,9 @@ getting stuck in repeated checking or continuing without progress. This is meant
 cleaner cold-start SFT improves the starting point and early efficiency of a later RL climb. It is
 not an assumption that shorter reasoning is always better or that RL cannot learn to stop itself.
 
-For the full project context, pipeline design, pilot mix, and backlog, see [AGENTS.md](AGENTS.md).
-The [pilot review site](docs/index.html) shows annotated pass/reject examples and all 50 rollouts
-from the latest saved batch; two examples from an earlier pilot are clearly labeled.
+For the full project context, measured results, launch plan, and backlog, see [AGENTS.md](AGENTS.md).
+The [pilot review site](docs/index.html) shows pass/reject examples from an earlier development
+batch. It is useful for understanding the output, not for estimating filter accuracy.
 
 1. A varied math/reasoning source produces prompts and provenance.
 2. A large teacher model solves each prompt, then rewrites its scratch work into clean reasoning
@@ -35,45 +35,28 @@ Prepare the reusable source pools once. Supplied solutions are preserved separat
 uv run synthetic-sft build-pools configs/source-pools.yaml
 ```
 
-Build the image, then submit a run. The example draws a deterministic 1,000-prompt mixture with
-50% of each difficulty-aware source allocated to its hard band:
+Build the image, then run the 128-sample calibration. It uses the same model, sources, generation,
+and review policy as the large launch:
 
 ```bash
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.6.sqsh"
-uv run synthetic-sft submit configs/reasoning-productivity-1000.yaml
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.18.sqsh"
+uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 ```
 
-For a different run size, change `source.num_samples`; the source mixture is sampled from the same
-pools without downloading or rebuilding them. A single-source Reasoning Gym smoke run remains
-available:
+The production candidate is `configs/reasoning-easy-production-1p84m.yaml`. It contains 230,000
+unique, elementary prompts and produces eight independent rollouts per prompt: 1.84 million
+candidates in total. The mix is intentionally easy and unambiguous because its purpose is to prime
+a policy for RL, not to use difficult synthesis as a substitute for RL. Submit it only after the
+calibration has been manually reviewed:
 
 ```bash
-uv run synthetic-sft submit configs/reasoning-gym-smoke.yaml
+uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-1p84m.yaml
+uv run synthetic-sft submit configs/reasoning-easy-production-1p84m.yaml
 ```
 
-The YAML controls the source, model, number of rollouts, judging, output location, and
-Slurm resources. A single submission uses every requested node and GPU.
-
-For throughput experiments, `configs/reasoning-throughput-128.yaml` runs a smaller Qwen3.6
-teacher on four independent GPUs. It keeps the same polishing and quality checks; inspect its
-outputs before choosing it for production. The original large-teacher profile remains available.
-`configs/reasoning-throughput-1024.yaml` measures sustained throughput with larger per-GPU queues
-on the regular preemptible partition, retaining the same checks.
-
-`model.execution: continuous` lets each rollout move into polishing and review as soon as it is
-ready, while other problems continue generating. `model.inflight_candidates` controls how many
-trajectories each replica works on at once. Completed candidates are saved in small groups, so an
-interruption does not lose a whole large batch. Use `normal` or `preemptable` in `slurm.partition`;
-submissions request requeue by default. Resume uses the same configuration and skips saved work.
-
-An experimental Swiss Model Launcher profile, `configs/reasoning-sml-deepseek41-64.yaml`,
-uses DeepSeek V4.1 Flash on two nodes. It exercises the same full pipeline through a private
-serving endpoint. This is a bounded benchmark, not yet a production `submit` backend;
-launch/inspection details are in `AGENTS.md`.
-The current retry, `configs/reasoning-sml-deepseek41-prefetch-64.yaml`, prefetches the weights
-on preemptible nodes. Rendering with `scripts/render_sml.py --seeds SAVED_SEEDS` produces `pilot.sh`:
-one Slurm job starts the server, checks its responses, runs the full pipeline, and releases
-the allocation when finished.
+One submission uses all requested nodes and GPUs. Completed candidates are checkpointed while the
+job is running. Preemption or a planned 24-hour restart resumes from those checkpoints and skips
+finished candidate IDs.
 
 ## Results
 
@@ -93,7 +76,7 @@ The Parquet datasets can be queried directly:
 
 ```sql
 SELECT source, correctness_only_eligible, productivity_filtered_eligible, count(*)
-FROM read_parquet('runs/reasoning-productivity-1000-v2/sft/**/*.parquet')
+FROM read_parquet('runs/reasoning-productive-easy-qwen36-1p84m-v3/sft/**/*.parquet')
 GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 
@@ -116,11 +99,11 @@ short RL climb. Compare completed correct answers, reasoning-limit hits, repetit
 tokens per correct answer, early reward coverage, and hard-problem solution coverage. The filter is
 useful only if cleaner stopping does not merely remove valuable exploration.
 
-## Using another source
+## Adding another source
 
-`reasoning_gym` creates tasks with known answers. `parquet` reads existing prompts and works
-naturally when no answer is available; verification is simply unavailable and judging supplies
-the quality signal. Source-specific fields are preserved inside `provenance_json`.
+New sources are first normalized into prompt and reference artifacts. A source answer is optional:
+when it is absent, deterministic verification stays unavailable and the critical reviews provide
+the quality signal. Source-specific metadata is preserved inside `provenance_json`.
 
 Use a new `run_id` whenever you change the model, prompts, sampling, or quality policy. Restarting
 an interrupted run keeps every completed rollout and generates only the missing rows.

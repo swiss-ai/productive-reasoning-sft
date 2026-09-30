@@ -291,6 +291,13 @@ Use integer scores 1 through 5 for reasoning and response:
 2 = useful progress but a serious error or omission requires a major rewrite.
 1 = absent, fundamentally wrong, incoherent, or unusable without replacement.
 
+Judge whether the amount of reasoning is proportionate to the task. For a routine problem,
+restating the full input, constructing data that is not needed, exhaustively enumerating irrelevant
+branches, or adding redundant verification is not training-ready merely because every statement is
+true. Mark a small isolated excess as 4 with `meandering`; mark a substantial disproportionate
+continuation at most 3 with `meandering`. Do not penalize length that is genuinely required by a
+difficult proof, exhaustive case split, or algorithm trace requested by the user.
+
 A false local mathematical equality, coefficient, count, or implication is not a style issue.
 Even if it does not change the final conclusion, reasoning is at most 3 with
 `factual_or_logical_error`; do not train a false step. Check the local step audit's calculation

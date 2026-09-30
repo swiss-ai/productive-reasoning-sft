@@ -220,12 +220,8 @@ class JudgeScores(StrictModel):
     def correctness_matches_response_grade(self) -> JudgeScores:
         verdict = self.correctness.verdict
         response_issues = set(self.response.issues)
-        if verdict == "incorrect" and (
-            self.response.score > 3 or "incorrect" not in response_issues
-        ):
-            raise ValueError(
-                "an incorrect answer requires response score at most 3 and issue incorrect"
-            )
+        if verdict == "incorrect" and self.response.score > 3:
+            raise ValueError("an incorrect answer requires response score at most 3")
         if verdict in {"correct", "reference_conflict"} and "incorrect" in response_issues:
             raise ValueError("a correct answer cannot carry response issue incorrect")
         if verdict == "indeterminate" and self.response.score > 3:

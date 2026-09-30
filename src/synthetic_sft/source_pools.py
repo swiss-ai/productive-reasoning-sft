@@ -504,6 +504,10 @@ def _reasoning_gym_rows(raw_dir: Path, repo_id: str, revision: str, config: Mapp
     )
     task_counts = _allocate_counts(total, task_weights)
     chunk_size = int(config.get("task_chunk_size", 1_000))
+    task_params = {
+        str(task): dict(params)
+        for task, params in dict(config.get("task_params", {})).items()
+    }
     jobs = []
     for task_index, (task, task_count) in enumerate(zip(tasks, task_counts, strict=True)):
         for chunk_index, chunk_start in enumerate(range(0, task_count, chunk_size)):
@@ -516,6 +520,7 @@ def _reasoning_gym_rows(raw_dir: Path, repo_id: str, revision: str, config: Mapp
                     chunk_start,
                     seed,
                     dict(difficulty_weights),
+                    task_params.get(task, {}),
                     repo_id,
                     revision,
                 )
@@ -543,6 +548,7 @@ def _reasoning_gym_task_rows(args: tuple[Any, ...]) -> list[tuple[dict[str, Any]
         chunk_start,
         seed,
         difficulty_weights,
+        task_params,
         repo_id,
         revision,
     ) = args
@@ -578,6 +584,13 @@ def _reasoning_gym_task_rows(args: tuple[Any, ...]) -> list[tuple[dict[str, Any]
                     if key not in {"size", "seed"}
                 }
             )
+        kwargs.update(
+            {
+                key: value
+                for key, value in task_params.items()
+                if key not in {"size", "seed"}
+            }
+        )
         dataset = reasoning_gym.create_dataset(task, **kwargs)
         for local_index, entry in enumerate(dataset):
             answer = to_jsonable(entry.get("answer"))
