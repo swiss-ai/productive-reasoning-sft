@@ -39,12 +39,12 @@ Build the image, then run the 128-sample calibration. It uses the same model, so
 and review policy as the large launch:
 
 ```bash
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.20.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.21.sqsh"
 uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 ```
 
-The production candidate is `configs/reasoning-easy-production-1p89m.yaml`. It contains 210,000
-unique, elementary prompts and produces nine independent rollouts per prompt: 1.89 million
+The production candidate is `configs/reasoning-easy-production-6m.yaml`. It contains 600,000
+unique, elementary prompts and produces ten independent rollouts per prompt: 6 million
 candidates in total. The mix is intentionally easy and unambiguous because its purpose is to prime
 a policy for RL, not to use difficult synthesis as a substitute for RL. Graph-path prompts are
 excluded because real calibration showed frequent teacher rabbit holes and inconsistent filter
@@ -52,8 +52,8 @@ labels on that source. Submit it only after the
 calibration has been manually reviewed:
 
 ```bash
-uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-1p89m.yaml
-uv run synthetic-sft submit configs/reasoning-easy-production-1p89m.yaml
+uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-6m.yaml
+uv run synthetic-sft submit configs/reasoning-easy-production-6m.yaml
 ```
 
 One submission uses all requested nodes and GPUs. Completed candidates are checkpointed while the
@@ -78,7 +78,7 @@ The Parquet datasets can be queried directly:
 
 ```sql
 SELECT source, correctness_only_eligible, productivity_filtered_eligible, count(*)
-FROM read_parquet('runs/reasoning-productive-easy-qwen36-1p89m-v1/sft/**/*.parquet')
+FROM read_parquet('runs/reasoning-productive-easy-qwen36-6m-v1/sft/**/*.parquet')
 GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 

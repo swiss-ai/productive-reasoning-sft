@@ -1,6 +1,6 @@
 # Final quality gate on the exact easy production source mixture.
 run:
-  run_id: reasoning-production-calibration-128-v5
+  run_id: reasoning-production-calibration-128-v6
   output_dir: ../runs
   seed: 55
   resume: true
@@ -12,19 +12,28 @@ source:
   params:
     sources:
       - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
-        weight: 0.015
+        weight: 0.005
         subsets: [gsm8k]
         difficulty_weights: {easy: 1.0}
-      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v3/prompts"
-        weight: 0.985
-        # path_star caused teacher rabbit holes and unstable productivity labels:
-        # ten of seventeen were rejected, while clear exhaustive traces still slipped through.
-        subsets:
-          - calendar_arithmetic
-          - fraction_simplification
-          - gsm_symbolic
-          - knights_knaves
-          - time_intervals
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v4/prompts"
+        weight: 0.04
+        subsets: [calendar_arithmetic]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v4/prompts"
+        weight: 0.0583333333
+        subsets: [fraction_simplification]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v4/prompts"
+        weight: 0.45
+        subsets: [gsm_symbolic]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v4/prompts"
+        weight: 0.2866666667
+        subsets: [knights_knaves]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v4/prompts"
+        weight: 0.16
+        subsets: [time_intervals]
         difficulty_weights: {easy: 1.0}
 
 model:
@@ -85,4 +94,4 @@ slurm:
   exclusive: true
   requeue: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.20.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.21.sqsh"
