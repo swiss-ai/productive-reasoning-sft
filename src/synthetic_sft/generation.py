@@ -65,6 +65,13 @@ class VLLMBatchPredictor:
     """One long-lived vLLM engine actor processing Ray Data batches."""
 
     def __init__(self, config: dict[str, Any], judge: bool) -> None:
+        LLM, SamplingParams, StructuredOutputsParams = self._backend_types()
+
+        self._sampling_type = SamplingParams
+        self._structured_outputs_type = StructuredOutputsParams
+        self._initialize(config, judge, LLM)
+
+    def _backend_types(self):
         try:
             from vllm import LLM, SamplingParams
             from vllm.sampling_params import StructuredOutputsParams
@@ -73,8 +80,9 @@ class VLLMBatchPredictor:
                 "vLLM is unavailable; run generation in the NVIDIA vLLM container"
             ) from exc
 
-        self._sampling_type = SamplingParams
-        self._structured_outputs_type = StructuredOutputsParams
+        return LLM, SamplingParams, StructuredOutputsParams
+
+    def _initialize(self, config, judge, LLM):
         self.config = PipelineConfig.model_validate(config)
         self.judge = judge
         self.fused_judge = not judge and can_fuse_judge(self.config)

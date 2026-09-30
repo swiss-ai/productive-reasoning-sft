@@ -9,12 +9,12 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
-import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
 from synthetic_sft.config import load_config
 from synthetic_sft.generation import FanOutCandidates, VLLMBatchPredictor
+from synthetic_sft.storage import candidate_table
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[8, 32])
     parser.add_argument("--max-num-seqs", type=int, default=64)
     parser.add_argument("--max-num-batched-tokens", type=int, default=8192)
-    parser.add_argument("--execution", choices=["waves", "continuous"], default="waves")
+    parser.add_argument("--execution", choices=["waves", "continuous", "endpoint"], default="waves")
     parser.add_argument("--inflight", type=int, default=32)
     parser.add_argument("--model")
     parser.add_argument("--tp", type=int)
@@ -64,13 +64,22 @@ def main():
         from synthetic_sft.continuous import ContinuousVLLMPredictor
 
         predictor_type = ContinuousVLLMPredictor
+    elif args.execution == "endpoint":
+        from synthetic_sft.endpoint import EndpointPredictor
+
+        predictor_type = EndpointPredictor
     predictor = predictor_type(config.model_dump(mode="json"), judge=False)
     startup_seconds = time.perf_counter() - started
-    import vllm
+    if args.execution == "endpoint":
+        backend_version = "remote; see deployment metadata/server logs"
+    else:
+        import vllm
+
+        backend_version = vllm.__version__
 
     print(
         json.dumps(
-            {"event": "startup", "seconds": startup_seconds, "vllm_version": vllm.__version__}
+            {"event": "startup", "seconds": startup_seconds, "vllm_version": backend_version}
         ),
         flush=True,
     )
@@ -87,7 +96,11 @@ def main():
                 results = [results]
             for index, result in enumerate(results):
                 pq.write_table(
-                    pa.Table.from_pandas(result, preserve_index=False),
+                    candidate_table(
+                        result.astype(object)
+                        .where(pd.notna(result), None)
+                        .to_dict(orient="records")
+                    ),
                     target / f"part-{offset:06d}-{index:06d}.parquet",
                     compression="zstd",
                 )

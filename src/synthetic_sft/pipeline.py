@@ -44,6 +44,8 @@ SFT_COLUMNS = [
 
 
 def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path:
+    if config.model.execution == "endpoint":
+        raise ValueError("Endpoint execution is a pilot: use scripts/benchmark_pipeline.py")
     config.run_dir.mkdir(parents=True, exist_ok=True)
     with RayCluster(
         run_dir=config.run_dir,

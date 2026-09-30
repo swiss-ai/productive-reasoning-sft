@@ -33,8 +33,16 @@ class SamplingConfig(StrictModel):
     reasoning_effort: str | None = Field(default="medium", pattern=r"^(low|medium|high|xhigh)$")
 
 
+class EndpointConfig(StrictModel):
+    served_model_name: str
+    base_url_env: str = "SFT_API_BASE"
+    api_key_env: str = "SFT_API_KEY"
+    timeout_seconds: float = Field(default=1800, gt=0)
+
+
 class ModelConfig(StrictModel):
-    execution: Literal["waves", "continuous"] = "waves"
+    execution: Literal["waves", "continuous", "endpoint"] = "waves"
+    endpoint: EndpointConfig | None = None
     inflight_candidates: int = Field(default=32, gt=0)
     model_source: str = "Qwen/Qwen3.8-27B"
     revision: str | None = None

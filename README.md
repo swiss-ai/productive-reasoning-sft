@@ -66,6 +66,11 @@ trajectories each replica works on at once. Completed candidates are saved in sm
 interruption does not lose a whole large batch. Use `normal` or `preemptable` in `slurm.partition`;
 submissions request requeue by default. Resume uses the same configuration and skips saved work.
 
+An experimental Swiss Model Launcher profile, `configs/reasoning-sml-deepseek41-64.yaml`,
+uses DeepSeek V4.1 Flash on two nodes. It exercises the same full pipeline through a private
+serving endpoint. This is a bounded benchmark, not yet a production `submit` backend;
+launch/inspection details are in `AGENTS.md`.
+
 ## Results
 
 Each run is written under `output_dir/run_id`:

@@ -4,5 +4,6 @@
 __pycache__/
 *.py[cod]
 runs/
+logs/
+env_resolved_*.toml
 *.sqsh
-

@@ -318,6 +318,46 @@ convincing repeated-checking rejection; do not present one as such.
 
 ## Backlog and boundaries
 
+### Active SML / DeepSeek pilot (September 30)
+
+The private DeepSeek V4.1 Flash deployment is Slurm **3548849**, two debug nodes
+`nid007170,nid007183`, started about 03:39 CEST. Debug allows 90 node-minutes, so the
+two-node allocation is limited to 45 minutes. Do not register this pilot on the public gateway.
+The existing Qwen 1,024-prompt job 3548372 completed successfully at about 03:38; its outputs
+still need the sustained-throughput/quality summary.
+
+`scripts/render_sml.py` uses SML's rendering API, with OpenTela/telemetry disabled, and its
+official vLLM 0.30 ARM64 environment. SML checkout:
+`/iopsstor/scratch/cscs/tchu/.cache/synthetic-sft/model-launch`, commit
+`1b3f59974cf593946faffe83fb4710f177ae82f1` (separate `uv sync --no-dev` environment).
+Render with that environment, supplying the config, a fresh deployment directory, and
+`--environment <sml-checkout>/src/swiss_ai_model_launch/assets/envs/vllm_0.30.0.toml`.
+Submit the resulting `master.sh` with `sbatch`; serving logs are `logs/<job-id>/replica_0.*`.
+Current generated recipe: `runs/reasoning-sml-deepseek41-64-v1/deployment-v2/` (its original
+90-minute request was changed to 45 through Slurm; the checked-in config is corrected).
+
+`model.execution: endpoint` is currently supported only by `scripts/benchmark_pipeline.py`,
+not the production Ray `run`/`submit` commands (those reject it explicitly). Its HTTP transport
+reuses the exact continuous orchestration and all generation/quality stages. The serving
+engine owns chat rendering; local `tokenizers` is used only to count/truncate text. Set
+`SFT_API_BASE=http://<head-ip>:8080/v1`; the configured model name is checked against `/models`.
+`uv sync --extra endpoint` supplies lightweight client dependencies, with no local vLLM needed.
+The v0.6 container can also run the client on a compute node. Use `srun --jobid=<id> --overlap`
+on the head node, and set `SLURM_JOB_ID` explicitly when invoking its EDF from a login shell.
+
+First run `scripts/probe_endpoint.py CONFIG OUTPUT`: it waits for readiness and saves real
+thinking/nonthinking/structured-answer calls, failing on a broken serving contract. Then use
+`scripts/benchmark_pipeline.py CONFIG SAVED_SEEDS OUTPUT --execution endpoint --samples 64
+--batch-sizes 64 --inflight 32 --max-num-batched-tokens 4096`. Saved real prompts are reused;
+this benchmark does not rebuild pools. DeepSeek supports xhigh (=100) and high (=75), but not
+the Qwen `medium` label. Draft effort is xhigh, critique effort high, and polishing/JSON checks
+disable thinking. Context/output are bounded at 32K/16K for this pilot, not the model card's
+full-capacity evaluation settings. Transport errors fail the run, never become math failures;
+completed groups remain in Parquet. Benchmark output directories are fresh-only, not resumable.
+Rates must count all eight GPUs/two nodes and distinguish server startup from warm generation.
+Cancel the serving job after measurement; do not leave it idle. No DeepSeek throughput or
+quality claim is established yet.
+
 - Calibrate the narrow Qwen judge on real traces. If false negatives remain high, tune prompts or
   switch to a stronger, low-hallucination judge via `quality.judge.model_source`.
 - **Do not enable critique-guided rewriting by default.** If strict-view rejection exceeds 80% on

@@ -8,6 +8,8 @@ from synthetic_sft.config import PipelineConfig
 
 
 def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]:
+    if config.model.execution == "endpoint":
+        raise ValueError("Deploy endpoint pilots with scripts/render_sml.py, not the Ray launcher")
     slurm = config.slurm
     project_dir = _project_root()
     job_script = project_dir / "slurm" / "job.sbatch"
