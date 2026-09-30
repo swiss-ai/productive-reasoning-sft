@@ -1,7 +1,7 @@
 # Throughput/quality arm: a bounded non-thinking solution draft followed by the
 # same independent cleanup and rubric-11 review as the production path.
 run:
-  run_id: reasoning-basic-qwen36-bounded-polish-calibration-64-v1
+  run_id: reasoning-basic-qwen36-bounded-polish-calibration-64-v2
   output_dir: ../runs
   seed: 49
   resume: true
@@ -81,4 +81,4 @@ slurm:
   exclusive: true
   requeue: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.9.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.10.sqsh"
