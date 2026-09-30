@@ -1,15 +1,13 @@
-# Launch candidate only. Do not submit until the easy-task quality pilot and a
-# multi-node resume/scale soak have passed manual review.
+# Representative quality/throughput pilot for the elementary RL-priming mix.
 run:
-  run_id: reasoning-easy-qwen36-1p2m-v1
+  run_id: reasoning-basic-qwen36-256-v1
   output_dir: ../runs
-  seed: 47
+  seed: 48
   resume: true
 
 source:
   adapter: pool
-  # Four independent rollouts over 300K unique, elementary prompts.
-  num_samples: 300000
+  num_samples: 256
   system_prompt: null
   params:
     sources:
@@ -48,7 +46,7 @@ model:
   max_num_seqs: 64
   max_num_batched_tokens: 4096
   enable_prefix_caching: true
-  batch_size: 1024
+  batch_size: 64
   sampling:
     temperature: 1.0
     top_p: 0.95
@@ -58,7 +56,7 @@ model:
     reasoning_effort: null
 
 generation:
-  rollouts_per_prompt: 4
+  rollouts_per_prompt: 1
   polish: true
   polish_max_tokens: 4096
 
@@ -67,7 +65,7 @@ quality:
   judge:
     enabled: true
     model_source: null
-    batch_size: 1024
+    batch_size: 64
     max_tokens: 768
     analysis_samples: 2
     analysis_max_tokens: 2048
@@ -76,24 +74,21 @@ quality:
     rubric_version: 10
 
 output:
-  parquet_target_mb: 256
+  parquet_target_mb: 64
   compression: zstd
   prepared_shards_per_gpu: 1
-  checkpoint_rows: 256
-  checkpoint_seconds: 300
+  checkpoint_rows: 32
+  checkpoint_seconds: 60
 
 slurm:
-  nodes: 20
+  nodes: 1
   gpus_per_node: 4
   cpus_per_node: 288
-  # Preemptable permits at most 24 hours. Requeue before the limit and resume
-  # from atomic candidate checkpoints until all 1.2M candidates are complete.
-  time: "24:00:00"
+  time: "01:00:00"
   partition: preemptable
   account: infra01
   qos: null
   exclusive: true
   requeue: true
-  requeue_before_timeout_seconds: 300
   environment: ../container/cscs.toml
   image: "${SCRATCH}/images/synthetic-sft-v0.6.sqsh"

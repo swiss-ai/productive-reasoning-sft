@@ -3,6 +3,62 @@ raw_dir: "${SCRATCH}/synthetic-sft-sources/raw"
 
 sources:
   # Current RL-priming pools: deliberately easy, answer-extractable tasks.
+  - name: reasoning-gym-basic
+    kind: reasoning_gym
+    num_samples: 300000
+    seed: 47
+    workers: 64
+    task_chunk_size: 1000
+    difficulty_weights: {easy: 1.0}
+    task_groups:
+      math:
+        weight: 0.50
+        tasks:
+          - simple_geometry
+          - calendar_arithmetic
+          - decimal_arithmetic
+          - dice
+          - fraction_simplification
+          - gsm_symbolic
+          - number_format
+          - prime_factorization
+          - time_intervals
+      logic:
+        weight: 0.35
+        tasks:
+          - course_schedule
+          - family_relationships
+          - path_star
+          - shortest_path
+          - knights_knaves
+          - syllogism
+      puzzles:
+        weight: 0.15
+        tasks:
+          - boxnet
+          - maze
+          - n_queens
+          - tower_of_hanoi
+
+  - name: numina-basic
+    raw_name: AI-MO/NuminaMath-CoT
+    kind: numina
+    repo_id: AI-MO/NuminaMath-CoT
+    allow_patterns:
+      - data/train-*.parquet
+    # These are elementary word-problem sources. CN K-12 and synthetic-math
+    # contain substantial difficult tails even when their solutions are short.
+    allowed_sources: [gsm8k, orca_math]
+    require_boxed_answer: true
+    max_problem_chars: 2000
+    max_solution_chars: 4000
+    excluded_prompt_markers:
+      - prove that
+      - show that
+      - provide a proof
+      - demonstrate that
+
+  # Superseded first pass, retained so the initial easy-source pilot is reproducible.
   - name: reasoning-gym-easy
     kind: reasoning_gym
     num_samples: 400000
