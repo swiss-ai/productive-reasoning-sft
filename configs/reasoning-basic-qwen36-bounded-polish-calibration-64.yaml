@@ -1,7 +1,7 @@
 # Throughput/quality arm: a bounded non-thinking solution draft followed by the
 # same independent cleanup and rubric-11 review as the production path.
 run:
-  run_id: reasoning-basic-qwen36-bounded-polish-calibration-64-v5
+  run_id: reasoning-basic-qwen36-bounded-polish-calibration-64-v6
   output_dir: ../runs
   seed: 49
   resume: true
@@ -58,7 +58,7 @@ quality:
     batch_size: 64
     max_tokens: 1024
     analysis_samples: 2
-    analysis_max_tokens: 2048
+    analysis_max_tokens: 1024
     hygiene_max_tokens: 768
     reasoning_effort: null
     rubric_version: 14
