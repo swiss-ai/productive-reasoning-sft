@@ -96,6 +96,7 @@ class OutputConfig(StrictModel):
 
 class SlurmConfig(StrictModel):
     requeue: bool = True
+    requeue_before_timeout_seconds: int | None = Field(default=None, ge=60)
     nodes: int = Field(default=1, gt=0)
     gpus_per_node: int = Field(default=4, gt=0)
     cpus_per_node: int = Field(default=288, gt=0)

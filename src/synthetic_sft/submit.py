@@ -47,6 +47,10 @@ def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]
         command.append("--exclusive")
     if slurm.mem is not None:
         command.append(f"--mem={slurm.mem}")
+    if slurm.requeue_before_timeout_seconds is not None:
+        if not slurm.requeue:
+            raise ValueError("requeue_before_timeout_seconds requires slurm.requeue: true")
+        command.append(f"--signal=B:USR1@{slurm.requeue_before_timeout_seconds}")
     command.append("--requeue" if slurm.requeue else "--no-requeue")
     command.append(str(job_script))
     return command

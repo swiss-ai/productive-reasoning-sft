@@ -9,6 +9,12 @@ ulimit -c 0
 
 mkdir -p "$RAY_PORT_BROADCAST_DIR"
 
+requeue_before_timeout() {
+  echo "Received the pre-timeout signal; requeueing job $SLURM_JOB_ID for a resumable continuation."
+  scontrol requeue "$SLURM_JOB_ID"
+}
+trap requeue_before_timeout USR1
+
 srun \
   --ntasks-per-node=1 \
   --environment="$SFT_ENVIRONMENT" \
