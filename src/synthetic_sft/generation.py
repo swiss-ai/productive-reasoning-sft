@@ -142,9 +142,14 @@ class VLLMBatchPredictor:
         if self.judge:
             self._quality(records)
             return pd.DataFrame.from_records(records)
-        messages = [self._messages(row) for row in records]
-        sampling = [self._sampling(row, phase="draft") for row in records]
-        template_kwargs = self._thinking_kwargs(self.config.model.sampling.reasoning_effort)
+        direct = self.config.generation.mode == "direct"
+        messages = [self._direct_messages(row) if direct else self._messages(row) for row in records]
+        sampling = [self._sampling(row, phase="direct" if direct else "draft") for row in records]
+        template_kwargs = (
+            {"enable_thinking": False}
+            if direct
+            else self._thinking_kwargs(self.config.model.sampling.reasoning_effort)
+        )
         results = self._chat(records, messages, sampling, template_kwargs, phase="generation")
         for row, output in results:
             candidate = output.outputs[0]
@@ -152,7 +157,13 @@ class VLLMBatchPredictor:
             row["draft_finish_reason"] = candidate.finish_reason
             row["draft_num_input_tokens"] = len(output.prompt_token_ids or [])
             row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
-        self._polish(records)
+            if direct:
+                row["raw_generation"] = candidate.text
+                row["finish_reason"] = candidate.finish_reason
+                row["num_input_tokens"] = len(output.prompt_token_ids or [])
+                row["num_generated_tokens"] = len(candidate.token_ids or [])
+        if not direct:
+            self._polish(records)
         tokenizer = self.llm.get_tokenizer()
         for row in records:
             reasoning, response, _ = split_reasoning(row.get("raw_generation"))
@@ -559,6 +570,32 @@ Scratch work:
         prompt = f"{prefix}{scratch}"
         return [{"role": "user", "content": prompt}]
 
+    def _direct_messages(self, row: dict[str, Any]) -> list[dict[str, str]]:
+        prompt = f"""Produce expert-quality supervised fine-tuning data for this problem.
+
+Solve and check the problem. Give a concise derivation containing every necessary logical step and
+no unnecessary ones. Do not include self-talk, plans, backtracking, repeated calculations, failed
+attempts, or an extra check after the answer is adequately supported. If the request is inconsistent
+or underdetermined, explain the specific defect and stop; never invent assumptions. The final
+response must obey the user's requested answer format exactly.
+
+Return exactly these two tagged sections with no text before or after them:
+<reasoning>
+clean derivation
+</reasoning>
+<response>
+final response
+</response>
+
+User request:
+{row.get("user_prompt", "")}
+"""
+        messages = []
+        if row.get("system_prompt"):
+            messages.append({"role": "system", "content": str(row["system_prompt"])})
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
     def _structured_sampling(self, row, schema, max_tokens: int, suffix: str):
         return self._sampling_type(
             temperature=0.0,
@@ -604,6 +641,8 @@ Scratch work:
                 seed=_candidate_seed(str(row["candidate_id"]), suffix="polish"),
             )
         params = self.config.model.sampling.model_dump(exclude={"reasoning_effort"})
+        if phase == "direct":
+            params["max_tokens"] = self.config.generation.polish_max_tokens
         return self._sampling_type(
             **params,
             seed=_candidate_seed(str(row["candidate_id"]), suffix="generate"),
