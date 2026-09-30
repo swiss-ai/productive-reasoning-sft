@@ -1,6 +1,6 @@
 # Final quality gate on the exact easy production source mixture.
 run:
-  run_id: reasoning-production-calibration-128-v4
+  run_id: reasoning-production-calibration-128-v5
   output_dir: ../runs
   seed: 55
   resume: true
@@ -17,6 +17,14 @@ source:
         difficulty_weights: {easy: 1.0}
       - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v3/prompts"
         weight: 0.985
+        # path_star caused teacher rabbit holes and unstable productivity labels:
+        # ten of seventeen were rejected, while clear exhaustive traces still slipped through.
+        subsets:
+          - calendar_arithmetic
+          - fraction_simplification
+          - gsm_symbolic
+          - knights_knaves
+          - time_intervals
         difficulty_weights: {easy: 1.0}
 
 model:

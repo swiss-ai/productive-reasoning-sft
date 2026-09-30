@@ -1,17 +1,17 @@
 # Launch candidate only. Do not submit until the bounded-polish calibration and
 # multi-node resume/scale soak have passed manual review.
 run:
-  run_id: reasoning-productive-easy-qwen36-1p84m-v5
+  run_id: reasoning-productive-easy-qwen36-1p89m-v1
   output_dir: ../runs
   seed: 47
   resume: true
 
 source:
   adapter: pool
-  # Eight independent rollouts over 230K unique elementary prompts. This is
-  # sized for the intended roughly 1,000 node-hour launch, with the final wall
+  # Nine independent rollouts over 210K unique elementary prompts (1.89M
+  # candidates). This is sized for the intended roughly 1,000 node-hour launch, with the final wall
   # estimate taken from the multi-node soak rather than assumed linear scaling.
-  num_samples: 230000
+  num_samples: 210000
   system_prompt: null
   params:
     sources:
@@ -22,6 +22,14 @@ source:
         difficulty_weights: {easy: 1.0}
       - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v3/prompts"
         weight: 0.985
+        # Exclude path_star: real calibration showed frequent teacher rabbit holes and
+        # inconsistent productivity judgments even after the dedicated critique.
+        subsets:
+          - calendar_arithmetic
+          - fraction_simplification
+          - gsm_symbolic
+          - knights_knaves
+          - time_intervals
         difficulty_weights: {easy: 1.0}
 
 model:
@@ -46,7 +54,7 @@ model:
 
 generation:
   mode: direct_polish
-  rollouts_per_prompt: 8
+  rollouts_per_prompt: 9
   polish: true
   polish_max_tokens: 4096
 

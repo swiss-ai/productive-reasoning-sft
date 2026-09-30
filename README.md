@@ -43,15 +43,15 @@ and review policy as the large launch:
 uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 ```
 
-The production candidate is `configs/reasoning-easy-production-1p84m.yaml`. It contains 230,000
-unique, elementary prompts and produces eight independent rollouts per prompt: 1.84 million
+The production candidate is `configs/reasoning-easy-production-1p89m.yaml`. It contains 210,000
+unique, elementary prompts and produces nine independent rollouts per prompt: 1.89 million
 candidates in total. The mix is intentionally easy and unambiguous because its purpose is to prime
 a policy for RL, not to use difficult synthesis as a substitute for RL. Submit it only after the
 calibration has been manually reviewed:
 
 ```bash
-uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-1p84m.yaml
-uv run synthetic-sft submit configs/reasoning-easy-production-1p84m.yaml
+uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-1p89m.yaml
+uv run synthetic-sft submit configs/reasoning-easy-production-1p89m.yaml
 ```
 
 One submission uses all requested nodes and GPUs. Completed candidates are checkpointed while the
@@ -76,7 +76,7 @@ The Parquet datasets can be queried directly:
 
 ```sql
 SELECT source, correctness_only_eligible, productivity_filtered_eligible, count(*)
-FROM read_parquet('runs/reasoning-productive-easy-qwen36-1p84m-v5/sft/**/*.parquet')
+FROM read_parquet('runs/reasoning-productive-easy-qwen36-1p89m-v1/sft/**/*.parquet')
 GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 
