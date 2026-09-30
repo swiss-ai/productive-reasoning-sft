@@ -1,0 +1,84 @@
+# Two-node production-path soak. Its deliberately short allocation must requeue
+# and resume from durable candidates before completing all 2,048 rollouts.
+run:
+  run_id: reasoning-production-soak-2048-v1
+  output_dir: ../runs
+  seed: 50
+  resume: true
+
+source:
+  adapter: pool
+  num_samples: 2048
+  system_prompt: null
+  params:
+    sources:
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
+        weight: 0.40
+        subsets: [gsm8k, orca_math]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-basic/prompts"
+        weight: 0.60
+        subsets: [calendar_arithmetic, decimal_arithmetic, fraction_simplification,
+          gsm_symbolic, number_format, prime_factorization, time_intervals,
+          path_star, knights_knaves, syllogism]
+        difficulty_weights: {easy: 1.0}
+
+model:
+  model_source: /capstor/store/cscs/swissai/infra01/hf_models/models/Qwen/Qwen3.6-35B-A3B-FP8
+  execution: continuous
+  inflight_candidates: 32
+  dtype: auto
+  tensor_parallel_size: 1
+  max_model_len: 24576
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 64
+  max_num_batched_tokens: 4096
+  enable_prefix_caching: true
+  batch_size: 256
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 8192
+    presence_penalty: 1.5
+    reasoning_effort: null
+
+generation:
+  mode: direct_polish
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 4096
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 256
+    max_tokens: 1024
+    analysis_samples: 2
+    analysis_max_tokens: 2048
+    hygiene_max_tokens: 768
+    reasoning_effort: null
+    rubric_version: 11
+
+output:
+  parquet_target_mb: 128
+  compression: zstd
+  prepared_shards_per_gpu: 1
+  checkpoint_rows: 64
+  checkpoint_seconds: 60
+
+slurm:
+  nodes: 2
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "00:10:00"
+  partition: preemptable
+  account: infra01
+  qos: null
+  exclusive: true
+  requeue: true
+  requeue_before_timeout_seconds: 60
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.10.sqsh"
