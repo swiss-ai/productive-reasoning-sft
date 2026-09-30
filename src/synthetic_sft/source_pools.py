@@ -96,6 +96,7 @@ def _build_one(config: Mapping[str, Any], output: Path, raw_dir: Path) -> Path:
     builder = {
         "deepscaler": _deepscaler_rows,
         "deepmath": _deepmath_rows,
+        "numina": _numina_rows,
         "openmath": _openmath_rows,
         "openthoughts": _openthoughts_rows,
         "reasoning_gym": _reasoning_gym_rows,
@@ -312,6 +313,89 @@ def _deepmath_rows(raw_dir: Path, repo_id: str, revision: str, config: Mapping[s
             if reference:
                 references.append(reference)
         yield prompt, references
+
+
+def _numina_rows(raw_dir: Path, repo_id: str, revision: str, config: Mapping[str, Any]):
+    """Prepare answer-extractable, non-proof NuminaMath examples for RL priming."""
+    paths = sorted((raw_dir / "data").glob("train-*.parquet"))
+    allowed_sources = set(
+        map(str, config.get("allowed_sources", ["gsm8k", "orca_math", "synthetic_math"]))
+    )
+    max_problem_chars = int(config.get("max_problem_chars", 4_000))
+    max_solution_chars = int(config.get("max_solution_chars", 12_000))
+    excluded_markers = tuple(
+        str(value).casefold()
+        for value in config.get(
+            "excluded_prompt_markers",
+            ["prove that", "show that", "provide a proof", "demonstrate that"],
+        )
+    )
+    require_boxed = bool(config.get("require_boxed_answer", True))
+    for filename, row in _parquet_rows(paths):
+        source_name = str(row.get("source") or "unknown")
+        if source_name not in allowed_sources:
+            continue
+        problem = str(row.get("problem") or "").strip()
+        solution = str(row.get("solution") or "").strip()
+        if not problem or not solution:
+            continue
+        if len(problem) > max_problem_chars or len(solution) > max_solution_chars:
+            continue
+        normalized_problem = problem.casefold()
+        if any(marker in normalized_problem for marker in excluded_markers):
+            continue
+        answer = _last_boxed_value(solution)
+        if require_boxed and answer is None:
+            continue
+        prompt = _make_prompt(
+            repo_id=repo_id,
+            revision=revision,
+            prompt=problem,
+            source=f"{repo_id}:{source_name}",
+            answer=answer,
+            band="easy",
+            difficulty=None,
+            subset=source_name,
+            domain="math",
+            metadata={
+                "source": source_name,
+                "raw_file": filename,
+                "selection": "easy_nonproof_answer_extractable",
+                "source_solution_chars": len(solution),
+            },
+        )
+        reference = _make_reference(
+            prompt,
+            solution,
+            answer,
+            "source_solution",
+            "solution",
+            {"source": source_name},
+        )
+        yield prompt, [reference] if reference else []
+
+
+def _last_boxed_value(text: str) -> str | None:
+    r"""Return the final balanced value from \boxed{...} or \fbox{...}."""
+    best: str | None = None
+    for marker in (r"\boxed{", r"\fbox{"):
+        start = 0
+        while (index := text.find(marker, start)) >= 0:
+            value_start = index + len(marker)
+            depth = 1
+            cursor = value_start
+            while cursor < len(text) and depth:
+                if text[cursor] == "{" and (cursor == 0 or text[cursor - 1] != "\\"):
+                    depth += 1
+                elif text[cursor] == "}" and (cursor == 0 or text[cursor - 1] != "\\"):
+                    depth -= 1
+                cursor += 1
+            if depth == 0:
+                value = text[value_start : cursor - 1].strip()
+                if value:
+                    best = value
+            start = value_start
+    return best
 
 
 def _openmath_rows(raw_dir: Path, repo_id: str, revision: str, config: Mapping[str, Any]):

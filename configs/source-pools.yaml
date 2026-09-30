@@ -2,6 +2,67 @@ output_dir: "${SCRATCH}/synthetic-sft-sources/pools"
 raw_dir: "${SCRATCH}/synthetic-sft-sources/raw"
 
 sources:
+  # Current RL-priming pools: deliberately easy, answer-extractable tasks.
+  - name: reasoning-gym-easy
+    kind: reasoning_gym
+    num_samples: 400000
+    seed: 45
+    workers: 64
+    task_chunk_size: 1000
+    difficulty_weights: {easy: 1.0}
+    task_groups:
+      math:
+        weight: 0.45
+        tasks:
+          - complex_arithmetic
+          - polynomial_equations
+          - polynomial_multiplication
+          - simple_geometry
+          - calendar_arithmetic
+          - decimal_arithmetic
+          - dice
+          - fraction_simplification
+          - gsm_symbolic
+          - power_function
+          - prime_factorization
+          - time_intervals
+      logic:
+        weight: 0.35
+        tasks:
+          - course_schedule
+          - family_relationships
+          - path_star
+          - shortest_path
+          - knights_knaves
+          - propositional_logic
+          - syllogism
+      puzzles:
+        weight: 0.20
+        tasks:
+          - boxnet
+          - kakurasu
+          - maze
+          - n_queens
+          - survo
+          - tower_of_hanoi
+
+  - name: numina-easy
+    raw_name: AI-MO/NuminaMath-CoT
+    kind: numina
+    repo_id: AI-MO/NuminaMath-CoT
+    allow_patterns:
+      - data/train-*.parquet
+    allowed_sources: [gsm8k, orca_math, synthetic_math, cn_k12]
+    require_boxed_answer: true
+    max_problem_chars: 4000
+    max_solution_chars: 12000
+    excluded_prompt_markers:
+      - prove that
+      - show that
+      - provide a proof
+      - demonstrate that
+
+  # Historical source pools retained for reproducibility of earlier pilots.
   - name: reasoning-gym
     kind: reasoning_gym
     # Headroom above the 250K needed by a one-million-row launch at this source share.
