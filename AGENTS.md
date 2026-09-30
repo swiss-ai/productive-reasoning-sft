@@ -220,6 +220,15 @@ Continuous actors now log engine statistics every ten seconds. Small pilots and 
 bound the Ray batch size to leave work for every active replica; otherwise Ray can combine all
 small blocks into one large batch and leave the other GPUs idle. The 128-prompt pilot uses
 32-row actor batches; production needs larger batches to amortize long-tail draining.
+Use a fixed `ActorPoolStrategy` with `max_tasks_in_flight_per_actor=1`. In the first real Ray
+pilot, default task prefetch assigned four batches to two actors and shut down the other two
+just after initialization. That interrupted run is not a four-GPU throughput measurement.
+The retry uses one actor batch in flight; this does not limit the concurrent model requests
+inside each batch. Engine-ready and phase metrics include timestamps for startup/warm-rate analysis.
+The container's home cache is ephemeral: the first two Qwen3.6 starts each recompiled the same
+825 DeepGEMM warmup kernels. `container/cscs.toml` now places vLLM/DeepGEMM, Triton, FlashInfer,
+and CUDA caches under scratch. This targets restart overhead, not steady-state throughput;
+cache reuse still needs a measured subsequent launch.
 
 Swiss Model Launcher manages vLLM/SGLang deployments; it is not a separate inference engine.
 The [serving leaderboard](https://serving.swissai.svc.cscs.ch/leaderboard) ranks token usage, and

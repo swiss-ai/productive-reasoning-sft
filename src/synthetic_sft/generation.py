@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Any
 
@@ -109,7 +110,15 @@ class VLLMBatchPredictor:
             kwargs["revision"] = model.revision
         if model.max_num_batched_tokens is not None:
             kwargs["max_num_batched_tokens"] = model.max_num_batched_tokens
+        engine_started = time.perf_counter()
         self.llm = self._create_engine(LLM, kwargs)
+        _LOGGER.warning(json.dumps({
+            "event": "engine_ready",
+            "pid": os.getpid(),
+            "model": model_source,
+            "startup_seconds": time.perf_counter() - engine_started,
+            "ready_at_unix": time.time(),
+        }))
 
     def _create_engine(self, engine_type, kwargs):
         return engine_type(**kwargs)
@@ -184,6 +193,8 @@ class VLLMBatchPredictor:
     def _record_timing(self, phase, started, requested, results):
         metric = {
             "event": "inference_phase",
+            "pid": os.getpid(),
+            "completed_at_unix": time.time(),
             "phase": phase,
             "candidate_ids": [str(row["candidate_id"]) for row, _ in results],
             "requests": requested,
@@ -602,6 +613,8 @@ def build_vllm_processor(
     config_payload = config.model_dump(mode="json")
 
     def process(dataset):
+        from ray.data import ActorPoolStrategy
+
         predictor = VLLMBatchPredictor
         constructor = {"config": config_payload, "judge": judge}
         if config.model.execution == "continuous":
@@ -613,7 +626,7 @@ def build_vllm_processor(
             predictor,
             batch_format="pandas",
             batch_size=batch_size,
-            concurrency=(concurrency, concurrency),
+            compute=ActorPoolStrategy(size=concurrency, max_tasks_in_flight_per_actor=1),
             num_cpus=1,
             num_gpus=config.model.tensor_parallel_size,
             zero_copy_batch=False,
