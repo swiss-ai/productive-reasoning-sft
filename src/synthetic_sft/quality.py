@@ -164,6 +164,8 @@ extract the most precise form. An intermediate expression is not a second final 
 If the response gives different answers for explicitly different domains or interpretations,
 return status `conditional`, type `text`, and one concise `value` preserving each condition.
 Example: "no maximum for unrestricted reals; 3^15 if all variables are nonnegative".
+An explicit conclusion that the problem is impossible, inconsistent, or underdetermined is an
+asserted text answer, not `no_answer`; extract its concise conclusion as type `text`.
 Do not call this ambiguous merely because it contains several numbers. Two incompatible claims
 under the SAME conditions are `ambiguous`. Do not decide whether the conditions are justified;
 the correctness judge handles that separately. An implicit and explicit form of the same solution
@@ -316,7 +318,9 @@ quality category, and `uncertain` when it cannot be settled. Do not return confi
 
 For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
 the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence
-cannot settle correctness. High confidence requires direct verification, a sound derivation, or a
+cannot settle correctness. If the candidate is correct and the reference is wrong, the verdict must
+be `reference_conflict`, never `incorrect`; the verdict and feedback must state the same conclusion.
+High confidence requires direct verification, a sound derivation, or a
 confirmed counterexample. Each feedback field must be under 25 words. Use plain English and
 ASCII names for mathematical symbols: no TeX commands, backslashes, raw line breaks, or internal
 quotation marks inside YOUR JSON feedback strings. This restriction does not apply to the

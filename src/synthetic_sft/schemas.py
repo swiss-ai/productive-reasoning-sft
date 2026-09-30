@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -91,9 +92,33 @@ class AnswerDetails(StrictModel):
 
 
 class CorrectnessAssessment(StrictModel):
-    verdict: Literal["correct", "incorrect", "indeterminate", "reference_conflict"]
+    verdict: Literal["correct", "incorrect", "indeterminate", "reference_conflict"] = Field(
+        description=(
+            "Use correct for a confirmed correct candidate, incorrect only for a confirmed "
+            "wrong candidate, reference_conflict when the candidate is correct and the source "
+            "reference is demonstrably wrong, and indeterminate when correctness is unsettled."
+        )
+    )
     confidence: Literal["high", "medium", "low"]
     feedback: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def verdict_does_not_contradict_feedback(self) -> CorrectnessAssessment:
+        feedback = self.feedback.casefold()
+        candidate_correct = re.search(
+            r"candidate(?:'s)? (?:final )?answer [^\n]{0,150}?\b(?:is|was) "
+            r"(?:mathematically )?correct\b",
+            feedback,
+        )
+        candidate_incorrect = re.search(
+            r"candidate(?:'s)? (?:final )?answer [^\n]{0,150}?\b(?:is|was) incorrect\b",
+            feedback,
+        )
+        if self.verdict == "incorrect" and candidate_correct:
+            raise ValueError("incorrect verdict contradicts feedback that the candidate is correct")
+        if self.verdict in {"correct", "reference_conflict"} and candidate_incorrect:
+            raise ValueError("correct verdict contradicts feedback that the candidate is incorrect")
+        return self
 
 
 ReasoningIssue = Literal[

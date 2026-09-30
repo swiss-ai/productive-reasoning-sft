@@ -508,7 +508,8 @@ class VLLMBatchPredictor:
             row["judge_retry_count"] = 1
             if '"response"' in original:
                 prompt = (
-                    "Repair this malformed judge JSON. Preserve its verdicts and scores. "
+                    "Repair this malformed judge JSON. Preserve its verdicts and scores unless "
+                    "a verdict contradicts its own feedback; in that case repair the verdict. "
                     "Add every schema-required key: reasoning and response each need an "
                     "issues array, empty only for score 5 and otherwise containing a matching "
                     "issue code. "
