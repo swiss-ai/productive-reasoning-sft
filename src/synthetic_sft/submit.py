@@ -39,6 +39,14 @@ def build_sbatch_command(
         "SFT_IMAGE": os.path.expandvars(slurm.image),
         "RAY_PORT_BROADCAST_DIR": str(config.run_dir / "cluster"),
     }
+    if slurm.requeue_before_timeout_seconds is not None:
+        total_seconds = _slurm_duration_seconds(slurm.time)
+        watchdog_seconds = total_seconds - slurm.requeue_before_timeout_seconds - 15
+        if watchdog_seconds <= 0:
+            raise ValueError(
+                "slurm.time must exceed requeue_before_timeout_seconds by more than 15 seconds"
+            )
+        exported["SFT_REQUEUE_AFTER_SECONDS"] = str(watchdog_seconds)
     export_arg = "ALL," + ",".join(f"{key}={value}" for key, value in exported.items())
     command = [
         "sbatch",
@@ -94,6 +102,27 @@ def _project_root() -> Path:
     if (candidate / "slurm" / "job.sbatch").exists():
         return candidate
     raise FileNotFoundError("run submission from the synthetic-sft repository root")
+
+
+def _slurm_duration_seconds(value: str) -> int:
+    day_parts = value.split("-", maxsplit=1)
+    if len(day_parts) == 2:
+        days = int(day_parts[0])
+        clock = day_parts[1]
+    else:
+        days = 0
+        clock = day_parts[0]
+    fields = [int(field) for field in clock.split(":")]
+    if len(fields) == 3:
+        hours, minutes, seconds = fields
+    elif len(fields) == 2:
+        hours = 0
+        minutes, seconds = fields
+    else:
+        raise ValueError(f"unsupported Slurm time format: {value!r}")
+    if minutes >= 60 or seconds >= 60:
+        raise ValueError(f"invalid Slurm time format: {value!r}")
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
 def _write_launch_config(config: PipelineConfig) -> Path:
