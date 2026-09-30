@@ -423,12 +423,19 @@ class VLLMBatchPredictor:
                 row["reference_answer_method"] = "atomic_source_fallback"
 
     def _run_critiques(self, records: list[dict[str, Any]]) -> None:
-        requests: list[dict[str, Any]] = []
-        messages = []
-        sampling = []
+        # Correctness benefits from deliberate reasoning. The local/productivity audit instead
+        # needs a short direct verdict: with thinking enabled it can spend its whole budget
+        # restating a long input and never reach the proportionality check. Keep both stages
+        # batched across the actor, but run them as two explicit waves with different templates.
+        waves: dict[str, tuple[list[dict[str, Any]], list[Any], list[Any]]] = {
+            "critique_global": ([], [], []),
+            "critique_local": ([], [], []),
+        }
         judge = self.config.quality.judge
         for index, row in enumerate(records):
             for sample_index in range(judge.analysis_samples):
+                phase = "critique_global" if sample_index % 2 == 0 else "critique_local"
+                requests, messages, sampling = waves[phase]
                 prompt = self._fit_prompt(
                     critic_prompt(row) if sample_index % 2 == 0 else local_claims_prompt(row),
                     judge.analysis_max_tokens,
@@ -448,13 +455,25 @@ class VLLMBatchPredictor:
                         seed=_candidate_seed(str(request["candidate_id"]), suffix="critic"),
                     )
                 )
-        results = self._chat(
-            requests,
-            messages,
-            sampling,
-            self._thinking_kwargs(judge.reasoning_effort),
-            phase="critique",
-        )
+        results = []
+        for phase in ("critique_global", "critique_local"):
+            requests, messages, sampling = waves[phase]
+            if not requests:
+                continue
+            template_kwargs = (
+                self._thinking_kwargs(judge.reasoning_effort)
+                if phase == "critique_global"
+                else {"enable_thinking": False}
+            )
+            results.extend(
+                self._chat(
+                    requests,
+                    messages,
+                    sampling,
+                    template_kwargs,
+                    phase=phase,
+                )
+            )
         analyses: list[list[tuple[int, str]]] = [[] for _ in records]
         for request, output in results:
             analyses[int(request["row_index"])].append(

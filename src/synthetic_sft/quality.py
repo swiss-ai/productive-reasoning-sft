@@ -233,7 +233,13 @@ reference is reliable, and every material reasoning or response defect you can s
 
 
 def local_claims_prompt(row: Mapping[str, Any]) -> str:
-    return f"""Audit the proposed SFT reasoning line by line for local mathematical truth.
+    return f"""Start with exactly one of these lines:
+PROPORTIONALITY: clear
+PROPORTIONALITY: defect — <name the specific unnecessary work>
+
+Do not restate the question, its data, the candidate reasoning, or these instructions. Keep the
+entire audit under 250 words. Audit the proposed SFT reasoning line by line for local mathematical
+truth.
 Ignore whether its final yes/no or number matches a source answer: a correct conclusion does not
 excuse a false intermediate equality. Check displayed algebra, coefficients, counts, inequalities,
 substitutions, and the hypotheses of any invoked theorem. For a counterexample, verify the
