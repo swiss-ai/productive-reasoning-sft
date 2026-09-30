@@ -290,6 +290,7 @@ class VLLMBatchPredictor:
         self._run_hygiene(records)
         self._arbitrate(records)
         self._retry_failed_arbitrations(records)
+        self._retry_failed_arbitrations_unconstrained(records)
         for row in records:
             self._finalize_quality(row)
 
@@ -561,6 +562,64 @@ class VLLMBatchPredictor:
             sampling,
             {"enable_thinking": False},
             phase="arbitration",
+        )
+        for row, output in results:
+            candidate = output.outputs[0]
+            row["judge_raw_output"] = candidate.text
+            row["judge_finish_reason"] = candidate.finish_reason
+            row["judge_num_generated_tokens"] = len(candidate.token_ids or [])
+
+    def _retry_failed_arbitrations_unconstrained(self, records: list[dict[str, Any]]) -> None:
+        """Recover rare guided-decoding whitespace loops without weakening the verdict.
+
+        Qwen occasionally fills a constrained string field with whitespace until the token cap,
+        even on the bounded structured retry. A second retry is only issued for those failures and
+        asks for the same schema as ordinary text. The usual strict parser and validators still
+        decide whether the result is usable; an invalid fallback remains an explicit judge error.
+        """
+        failed = [
+            row for row in records if parse_judge_scores(row.get("judge_raw_output"))[0] is None
+        ]
+        if not failed:
+            return
+        judge = self.config.quality.judge
+        max_tokens = max(1024, judge.max_tokens)
+        skeleton = """Return only one compact JSON object with exactly this shape:
+{"correctness":{"verdict":"correct|incorrect|indeterminate|reference_conflict","confidence":"high|medium|low","feedback":"under 20 words"},"reasoning":{"score":1,"issues":[],"feedback":"under 20 words"},"response":{"score":1,"issues":[],"feedback":"under 20 words"},"hygiene_confirmations":[]}
+Allowed reasoning issues: absent, incomplete, factual_or_logical_error, unsupported_step,
+missing_critical_step, contradiction, meandering, repetition, meta_commentary, poor_structure,
+unverifiable. Allowed response issues: incorrect, incomplete, instruction_violation,
+format_violation, irrelevant, unclear, oververbose, unsupported_claim, meta_commentary.
+Scores below 5 need an issue; score 5 needs none. An incorrect verdict requires response score at
+most 3 and issue incorrect. Use [] for hygiene_confirmations unless confirming a quoted focused
+defect. Do not emit markdown, analysis, TeX, or text outside the JSON object.
+
+"""
+        messages = []
+        sampling = []
+        for row in failed:
+            row["judge_retry_count"] = 2
+            prompt = skeleton + arbitration_prompt(
+                row,
+                _json_string_list(row.get("critic_analyses_json")),
+                judge.rubric_version,
+            )
+            messages.append([{"role": "user", "content": self._fit_prompt(prompt, max_tokens)}])
+            sampling.append(
+                self._sampling_type(
+                    temperature=0.0,
+                    max_tokens=max_tokens,
+                    seed=_candidate_seed(
+                        str(row["candidate_id"]), suffix="judge_retry_unconstrained"
+                    ),
+                )
+            )
+        results = self._chat(
+            failed,
+            messages,
+            sampling,
+            {"enable_thinking": False},
+            phase="arbitration_fallback",
         )
         for row, output in results:
             candidate = output.outputs[0]

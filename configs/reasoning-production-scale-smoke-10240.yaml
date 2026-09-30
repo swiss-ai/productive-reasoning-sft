@@ -85,4 +85,4 @@ slurm:
   exclusive: true
   requeue: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.20.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.21.sqsh"
