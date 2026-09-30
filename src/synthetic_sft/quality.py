@@ -319,6 +319,10 @@ Reject a focused finding that merely identifies a mathematical, rounding, interp
 proof error without proving the named productivity failure. In particular, `no_new_progress`
 requires a substantial unproductive continuation, `unresolved_branch` requires a genuinely open
 alternative or contradiction, and repetition across distinct cases is useful rather than wasteful.
+Once the literal problem has already been shown underdetermined or inconsistent, checking one
+plausible interpretation can support that conclusion; continuing through a catalogue of invented
+typos, changed percentages, or altered premises does not. Confirm `no_new_progress` when the quoted
+passage is part of such a substantial post-conclusion detour.
 
 For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
 the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence
