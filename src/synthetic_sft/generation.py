@@ -116,6 +116,8 @@ class VLLMBatchPredictor:
         }
         if model.revision:
             kwargs["revision"] = model.revision
+        if model.safetensors_load_strategy is not None:
+            kwargs["safetensors_load_strategy"] = model.safetensors_load_strategy
         if model.max_num_batched_tokens is not None:
             kwargs["max_num_batched_tokens"] = model.max_num_batched_tokens
         engine_started = time.perf_counter()

@@ -59,6 +59,7 @@ class ModelConfig(StrictModel):
     enable_prefix_caching: bool = True
     batch_size: int = Field(default=64, gt=0)
     trust_remote_code: bool = False
+    safetensors_load_strategy: Literal["lazy", "eager", "prefetch"] | None = None
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
 
 
@@ -103,6 +104,9 @@ class SlurmConfig(StrictModel):
     account: str | None = None
     qos: str | None = None
     exclusive: bool = True
+    mem: str | None = Field(
+        default=None, pattern=r"^\d+[KMGTP]?$", description="Slurm memory per node; 0 requests all"
+    )
     environment: Path = Path("container/cscs.toml")
     image: str = "nvcr.io#nvidia/vllm:26.08-py3"
 

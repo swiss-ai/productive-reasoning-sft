@@ -368,6 +368,36 @@ Rates must count all eight GPUs/two nodes and distinguish server startup from wa
 Cancel the serving job after measurement; do not leave it idle. No DeepSeek throughput or
 quality claim is established yet.
 
+The first SML launch spends roughly 20 minutes reading weights from Lustre. The running
+vLLM image defaults to mmap loading (automatic prefetch applies to NFS, not Lustre).
+For the next cold-start comparison, try `--safetensors-load-strategy eager`, which reads each
+shard into CPU RAM up front; this is [vLLM's recommended network-filesystem strategy](https://github.com/vllm-project/vllm/blob/v0.30.0/vllm/config/load.py).
+It has not been benchmarked here and must not be reported as an achieved speedup.
+
+Update at ~04:12 CEST: the debug attempt was cancelled deliberately after over 30 minutes
+without a ready endpoint. No inference result exists from it. Its shard iterator reached 100%
+after 17.4 minutes, but that was **not** model-ready: stack snapshots found the workers still
+inside Engram/expert `copy_` loaders, blocked on Lustre I/O, with GPUs idle. Job memory events
+showed no limit hits or OOMs. Two bounded read-only cache-warming steps read the Engram shards
+(~1.4–1.9 GB/s per node) and then the other shards; they did not make the endpoint ready before
+cancellation. Do not present this attempt as an inference throughput measurement.
+
+The regular-queue retry is **3548976**, using
+`configs/reasoning-sml-deepseek41-eager-64.yaml` and run `reasoning-sml-deepseek41-64-v2`.
+It requests 800 GiB host RAM per node and 75 minutes, with eager loading; Slurm rejected
+`--mem=0`, while the explicit 800G request was accepted. This larger allowance avoids the
+default 450 GiB limit while multiple workers stage large shards in CPU RAM. The actual recipe
+is `runs/reasoning-sml-deepseek41-64-v2/deployment-mem800/`. It was submitted with an afterany
+dependency on the cancelled debug job; check its state before submitting anything else.
+
+The renderer now accepts `--seeds SAVED_SEEDS` and emits a `pilot.sh` allocation script as well
+as `master.sh`. Submit **pilot.sh** for a single-job trial: `slurm/sml-pilot.sh` starts SML and
+a CPU client in the same allocation, runs the real API probes followed by the 64-prompt
+benchmark, and exits on either client completion/failure or an early serving failure. Slurm
+then releases all resources. Client logs are `runs/<id>/logs/client.{out,err}`; serving logs
+remain `logs/<job>/replica_0.*`; raw probes and completed candidate groups stay under the run.
+The initial endpoint probes were restarted before inference to use explicit effort 100.
+
 ## Backlog and boundaries
 
 - Calibrate the narrow Qwen judge on real traces. If false negatives remain high, tune prompts or

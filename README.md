@@ -70,6 +70,10 @@ An experimental Swiss Model Launcher profile, `configs/reasoning-sml-deepseek41-
 uses DeepSeek V4.1 Flash on two nodes. It exercises the same full pipeline through a private
 serving endpoint. This is a bounded benchmark, not yet a production `submit` backend;
 launch/inspection details are in `AGENTS.md`.
+The regular-queue retry, `configs/reasoning-sml-deepseek41-eager-64.yaml`, uses eager weight
+loading. Rendering with `scripts/render_sml.py --seeds SAVED_SEEDS` also produces `pilot.sh`:
+one Slurm job starts the server, checks its responses, runs the full pipeline, and releases
+the allocation when finished.
 
 ## Results
 

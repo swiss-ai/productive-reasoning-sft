@@ -6,6 +6,7 @@ registration or credentials. The generated master.sh is submitted with sbatch.
 
 import argparse
 import json
+import os
 import shlex
 from pathlib import Path
 
@@ -21,6 +22,7 @@ def main():
     parser.add_argument("config", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--environment", type=Path, required=True)
+    parser.add_argument("--seeds", type=Path, help="Also render a single-job pipeline pilot")
     args = parser.parse_args()
     config = yaml.safe_load(args.config.read_text())
     model, slurm = config["model"], config["slurm"]
@@ -36,6 +38,10 @@ def main():
         "--generation-config", "vllm",
         "--seed", str(config["run"]["seed"]),
     ])
+    if model.get("safetensors_load_strategy"):
+        framework_args += " --safetensors-load-strategy " + shlex.quote(
+            model["safetensors_load_strategy"]
+        )
     launch = LaunchArgs(
         job_name=config["run"]["run_id"],
         served_model_name=model["endpoint"]["served_model_name"],
@@ -52,9 +58,32 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     for name, content in render_rank_scripts(launch).items():
         (args.output / name).write_text(content)
-    master = render_sbatch_header(launch) + "\n" + render_master(launch)
+    header = render_sbatch_header(launch)
+    if slurm.get("mem") is not None:
+        header += f"\n#SBATCH --mem={shlex.quote(str(slurm['mem']))}\n"
+    master = header + "\n" + render_master(launch)
     (args.output / "master.sh").write_text(master)
     (args.output / "launch.json").write_text(json.dumps(launch.model_dump(), indent=2))
+    if args.seeds:
+        project = Path(__file__).resolve().parent.parent
+        run_dir = (
+            args.config.parent / config["run"]["output_dir"] / config["run"]["run_id"]
+        ).resolve()
+        environment = (args.config.parent / slurm["environment"]).resolve()
+        command = shlex.join([
+            "bash", str(project / "slurm/sml-pilot.sh"),
+            str(args.config.resolve()), str((args.output / "master.sh").resolve()),
+            str(args.seeds.resolve()), str(run_dir), str(config["source"]["num_samples"]),
+            str(model["inflight_candidates"]), str(model["max_num_batched_tokens"]),
+        ])
+        exports = "\n".join(
+            f"export {key}={shlex.quote(value)}" for key, value in {
+                "SFT_PROJECT_DIR": str(project),
+                "SFT_IMAGE": os.path.expandvars(slurm["image"]),
+                "SFT_CLIENT_ENVIRONMENT": str(environment),
+            }.items()
+        )
+        (args.output / "pilot.sh").write_text(header + "\n" + exports + "\nexec " + command + "\n")
     print(args.output / "master.sh")
 
 
