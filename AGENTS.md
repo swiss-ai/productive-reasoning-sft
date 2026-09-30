@@ -327,6 +327,12 @@ convincing repeated-checking rejection; do not present one as such.
 
 ## Active SML / DeepSeek pilot (September 30)
 
+**Current attempt: job 3548993**, `configs/reasoning-sml-deepseek41-prefetch-64.yaml`,
+run `reasoning-sml-deepseek41-64-v3`, on two preemptible nodes with 800 GiB RAM/node.
+It uses explicit prefetch, effort 100/75, and the automatic single-job 64-prompt client below.
+Check this job and its `logs/client.{out,err}` before launching anything else. Neither earlier
+attempt produced inference results. The history below explains the loading changes.
+
 The private DeepSeek V4.1 Flash deployment is Slurm **3548849**, two debug nodes
 `nid007170,nid007183`, started about 03:39 CEST. Debug allows 90 node-minutes, so the
 two-node allocation is limited to 45 minutes. Do not register this pilot on the public gateway.
@@ -398,6 +404,14 @@ SBATCH header still says normal; the live Slurm allocation is authoritative. No 
 or elevated QOS was requested.
 The retry started at **04:14:16 CEST** on `nid006144,nid007009`; Slurm confirms 800 GiB RAM
 per node and all eight GPUs allocated. No DeepSeek inference result was available at 04:17.
+It then failed during initialization with `KeyError: 'F8_E8M0'` in
+`safetensors.torch.load`/`_view2torch`: the **eager** loader in this image cannot deserialize
+the model's scale dtype. The single-job wrapper detected the serving failure and released
+the allocation. Do not use the eager profile as a working launch recipe. Also, the DeepSeek
+loader calls `sorted(...)` on the entire weight iterator, so eager deserialization would
+retain a full checkpoint per worker, not merely a shard; patching only the dtype mapping
+would create a serious host-memory problem. Explicit prefetch retains the compatible mmap
+reader and shared OS cache. Job 3548993 is that corrected, bounded retry, submitted at ~04:18.
 
 The renderer now accepts `--seeds SAVED_SEEDS` and emits a `pilot.sh` allocation script as well
 as `master.sh`. Submit **pilot.sh** for a single-job trial: `slurm/sml-pilot.sh` starts SML and

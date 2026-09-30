@@ -1,6 +1,7 @@
 #!/bin/bash
 # Run the SML service and the CPU pipeline client in one bounded allocation.
 set -euo pipefail
+ulimit -c 0
 config=$1
 master=$2
 seeds=$3
