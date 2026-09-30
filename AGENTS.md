@@ -257,8 +257,11 @@ conservative yield loss, not deletion: every candidate remains queryable. A malf
 reference extraction also caused one correct candidate to be excluded. The strict flag is not a
 statistically calibrated classifier; the matched SFT/RL ablation remains the research test.
 
-The production candidate is ready for owner approval, but the 20-node production job has not been
-submitted.
+The owner approved the production launch. Slurm job **3551775** was submitted on 2026-09-30 at
+13:09 CEST and initially entered `PENDING (Priority)`. It requests the resolved 6M-candidate
+configuration above: 20 preemptible nodes, 80 GPUs, a 24-hour limit, and automatic requeue. Inspect
+this job and its run directory before submitting anything else; do not create a duplicate while it
+is pending, running, or resumable.
 
 Inspect a completed run with:
 
@@ -287,10 +290,11 @@ uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-6m.yaml
 ```
 
-Do not submit the 20-node launch without explicit owner approval. Use a new `run_id` whenever the
-model, source, sampling, or quality policy changes; completed stages have manifests tied to the
-resolved configuration. A resumed run skips durable candidate IDs. In-flight requests can be lost
-at preemption, but completed groups cannot.
+Production was submitted with explicit owner approval as job 3551775. Do not submit another copy;
+resume/requeue this run if intervention is needed. Use a new `run_id` whenever the model, source,
+sampling, or quality policy changes; completed stages have manifests tied to the resolved
+configuration. A resumed run skips durable candidate IDs. In-flight requests can be lost at
+preemption, but completed groups cannot.
 
 Each run contains `prepared/seeds/`, `intermediate/generated/`, `candidates/`, `sft/`, `logs/`, and
 `manifests/`. The SFT export contains every candidate with clean training columns, provenance,
