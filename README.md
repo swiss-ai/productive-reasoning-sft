@@ -46,7 +46,9 @@ uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 The production candidate is `configs/reasoning-easy-production-1p89m.yaml`. It contains 210,000
 unique, elementary prompts and produces nine independent rollouts per prompt: 1.89 million
 candidates in total. The mix is intentionally easy and unambiguous because its purpose is to prime
-a policy for RL, not to use difficult synthesis as a substitute for RL. Submit it only after the
+a policy for RL, not to use difficult synthesis as a substitute for RL. Graph-path prompts are
+excluded because real calibration showed frequent teacher rabbit holes and inconsistent filter
+labels on that source. Submit it only after the
 calibration has been manually reviewed:
 
 ```bash

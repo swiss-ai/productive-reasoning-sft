@@ -83,7 +83,7 @@ slurm:
   gpus_per_node: 4
   cpus_per_node: 288
   # Preemptable permits at most 24 hours. Requeue before the limit and resume
-  # from atomic candidate checkpoints until all 1.84M candidates are complete.
+  # from atomic candidate checkpoints until all 1.89M candidates are complete.
   time: "24:00:00"
   partition: preemptable
   account: infra01
