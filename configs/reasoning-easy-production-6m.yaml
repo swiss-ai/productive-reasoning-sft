@@ -1,5 +1,5 @@
-# Launch candidate only. Do not submit until the bounded-polish calibration and
-# multi-node resume/scale soak have passed manual review.
+# The quality, sustained-throughput, 20-node topology, and restart gates have passed.
+# Production still requires explicit owner approval before submission.
 run:
   run_id: reasoning-productive-easy-qwen36-6m-v1
   output_dir: ../runs
