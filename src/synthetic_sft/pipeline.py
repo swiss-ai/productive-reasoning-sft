@@ -17,6 +17,7 @@ from synthetic_sft.generation import (
 from synthetic_sft.prepare import prepare_source
 from synthetic_sft.quality import FinalizeQuality, ParseAndVerify
 from synthetic_sft.schemas import quality_details_schema
+from synthetic_sft.storage import normalize_candidate_batch
 
 SFT_COLUMNS = [
     "sample_id",
@@ -146,6 +147,7 @@ def run_pipeline(config: PipelineConfig, *, force_prepare: bool = False) -> Path
                         ),
                     )(candidates)
                 candidates = candidates.map(FinalizeQuality(config.model_dump(mode="json")))
+            candidates = candidates.map_batches(normalize_candidate_batch, batch_format="pyarrow")
             candidates.write_parquet(str(candidates_path), compression=config.output.compression)
             _mark_stage(config, "candidates", candidates_path, stage_started)
 

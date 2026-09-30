@@ -1,12 +1,14 @@
+# Sustained-throughput pilot, not a production-quality approval.
+# Four replicas each receive 256 prompts, continuously replenishing 32 active trajectories.
 run:
-  run_id: reasoning-productivity-1000-v2
+  run_id: reasoning-throughput-qwen36-1024-v1
   output_dir: ../runs
-  seed: 42
+  seed: 44
   resume: true
 
 source:
   adapter: pool
-  num_samples: 1000
+  num_samples: 1024
   system_prompt: null
   params:
     sources:
@@ -29,26 +31,26 @@ source:
         difficulty_weights: {unknown: 1.0}
 
 model:
-  model_source: Qwen/Qwen3.8-Flash-Next-FP8
+  model_source: /capstor/store/cscs/swissai/infra01/hf_models/models/Qwen/Qwen3.6-35B-A3B-FP8
   execution: continuous
   inflight_candidates: 32
   dtype: auto
-  tensor_parallel_size: 4
+  tensor_parallel_size: 1
   max_model_len: 32768
   gpu_memory_utilization: 0.90
   max_num_seqs: 64
   max_num_batched_tokens: 4096
   enable_prefix_caching: true
   batch_size: 256
-  trust_remote_code: false
   sampling:
     temperature: 1.0
     top_p: 0.95
     top_k: 20
     max_tokens: 16384
-    presence_penalty: 0.0
-    repetition_penalty: 1.0
-    reasoning_effort: xhigh
+    # The model card's general thinking preset (separate from the teacher comparison).
+    presence_penalty: 1.5
+    # This model supports thinking but its template has no effort control.
+    reasoning_effort: null
 
 generation:
   rollouts_per_prompt: 1
@@ -65,20 +67,22 @@ quality:
     analysis_samples: 2
     analysis_max_tokens: 2048
     hygiene_max_tokens: 768
-    reasoning_effort: medium
+    reasoning_effort: null
     rubric_version: 10
 
 output:
   parquet_target_mb: 64
   compression: zstd
-  prepared_shards_per_gpu: 4
+  prepared_shards_per_gpu: 1
+  checkpoint_rows: 32
+  checkpoint_seconds: 60
 
 slurm:
   nodes: 1
   gpus_per_node: 4
   cpus_per_node: 288
-  time: "12:00:00"
-  partition: normal
+  time: "02:00:00"
+  partition: preemptable
   account: infra01
   qos: null
   exclusive: true

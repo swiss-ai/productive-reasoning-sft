@@ -47,6 +47,11 @@ def candidate_table(records):
     return pa.Table.from_pylist(records, schema=CANDIDATE_SCHEMA)
 
 
+def normalize_candidate_batch(table: pa.Table) -> pa.Table:
+    """Restore nullable types after Ray's row-wise quality transforms infer each block."""
+    return candidate_table(table.to_pylist())
+
+
 def write_candidates(records, directory: Path, compression="zstd") -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"part-{uuid.uuid4().hex}.parquet"

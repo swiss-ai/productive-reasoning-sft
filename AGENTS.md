@@ -230,6 +230,33 @@ The container's home cache is ephemeral: the first two Qwen3.6 starts each recom
 and CUDA caches under scratch. This targets restart overhead, not steady-state throughput;
 cache reuse still needs a measured subsequent launch.
 
+The corrected four-GPU Ray pilot completed all 128 prompts. Generation plus all fused checks
+took 414.6 seconds after all engines were ready: 1,111 candidates/hour/node, 60 eligible
+(521 eligible/hour). Including actor startup and input setup gives 587 candidates/hour; the
+original CPU export added 3.3 seconds. Scores 0–5 were 20, 1, 19, 28, 0, 60; hygiene passed/failed/
+uncertain was 73/36/19. There were 67 capped drafts, 10 capped polishes and 11 incomplete final
+generations. Artifacts: `runs/reasoning-throughput-qwen36-128-v1/`, with an investigation report
+at `runs/throughput-20260930-report.md`. These rates include rejects and all review calls, but
+do not count the earlier interrupted actor-pool attempt or export repair as steady-state work.
+
+On the 35 shared prompts, large/small teacher configurations had 25/17 eligible rows and both
+had 23 verifier passes. Mean draft lengths were 7,922/11,367 tokens. Sampling and judges differ;
+this is not a controlled teacher-quality comparison. Manual review found a useful rejection of
+an incorrect syllogism classification, but also an extractor that changed the literal answer
+`7` into `,  `. Do not approve the smaller teacher/judge for production just from its speed.
+
+The final CPU transforms initially reintroduced null-only Arrow columns. Final candidate export
+now restores the fixed nullable schema, and the repaired candidate/SFT directories read directly
+as Arrow datasets, preserving every candidate field. The old exports are retained as
+`*.incomplete.*`; generations were not rerun. Ray log deduplication is disabled for future jobs
+because it otherwise suppresses distinct numeric phase metrics.
+
+`configs/reasoning-throughput-1024.yaml` is the sustained-throughput follow-up on `preemptable`:
+same model/sampling/checks, four TP1 replicas, 32 active trajectories and a 256-prompt queue per
+replica. It measures replenishment instead of draining after only 32 prompts/GPU. The large-teacher
+1,000-prompt profile now uses continuous scheduling with a fresh `reasoning-productivity-1000-v2`
+run ID. No million-sample production run is authorized by these pilot results.
+
 Swiss Model Launcher manages vLLM/SGLang deployments; it is not a separate inference engine.
 The [serving leaderboard](https://serving.swissai.svc.cscs.ch/leaderboard) ranks token usage, and
 the performance page reports per-query speed, not sustained samples/GPU-hour. The published

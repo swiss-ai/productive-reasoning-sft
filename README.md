@@ -57,6 +57,8 @@ Slurm resources. A single submission uses every requested node and GPU.
 For throughput experiments, `configs/reasoning-throughput-128.yaml` runs a smaller Qwen3.6
 teacher on four independent GPUs. It keeps the same polishing and quality checks; inspect its
 outputs before choosing it for production. The original large-teacher profile remains available.
+`configs/reasoning-throughput-1024.yaml` measures sustained throughput with larger per-GPU queues
+on the regular preemptible partition, retaining the same checks.
 
 `model.execution: continuous` lets each rollout move into polishing and review as soon as it is
 ready, while other problems continue generating. `model.inflight_candidates` controls how many
@@ -82,7 +84,7 @@ The Parquet datasets can be queried directly:
 
 ```sql
 SELECT source, correctness_only_eligible, productivity_filtered_eligible, count(*)
-FROM read_parquet('runs/reasoning-productivity-1000-v1/sft/**/*.parquet')
+FROM read_parquet('runs/reasoning-productivity-1000-v2/sft/**/*.parquet')
 GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 
