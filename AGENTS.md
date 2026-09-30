@@ -356,8 +356,11 @@ First run `scripts/probe_endpoint.py CONFIG OUTPUT`: it waits for readiness and 
 thinking/nonthinking/structured-answer calls, failing on a broken serving contract. Then use
 `scripts/benchmark_pipeline.py CONFIG SAVED_SEEDS OUTPUT --execution endpoint --samples 64
 --batch-sizes 64 --inflight 32 --max-num-batched-tokens 4096`. Saved real prompts are reused;
-this benchmark does not rebuild pools. DeepSeek supports xhigh (=100) and high (=75), but not
-the Qwen `medium` label. Draft effort is xhigh, critique effort high, and polishing/JSON checks
+this benchmark does not rebuild pools. Inspection of the actual server image's
+`deepseek_v41_encoding.py` found low/high/xhigh/max map to 25/50/75/100, unlike the hosted
+API's aliases. The config therefore uses numeric draft effort **100** and critique effort **75**.
+`medium` is unsupported. Numeric efforts 1–100 and `max` are accepted by our config; only use
+these with teachers that support them. Polishing/JSON checks
 disable thinking. Context/output are bounded at 32K/16K for this pilot, not the model card's
 full-capacity evaluation settings. Transport errors fail the run, never become math failures;
 completed groups remain in Parquet. Benchmark output directories are fresh-only, not resumable.

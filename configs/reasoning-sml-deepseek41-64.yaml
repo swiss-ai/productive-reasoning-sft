@@ -49,7 +49,8 @@ model:
     top_k: -1
     max_tokens: 16384
     presence_penalty: 0.0
-    reasoning_effort: xhigh
+    # Numeric levels avoid aliases differing between the hosted API and vLLM.
+    reasoning_effort: 100
 
 generation:
   rollouts_per_prompt: 1
@@ -66,7 +67,7 @@ quality:
     analysis_samples: 2
     analysis_max_tokens: 2048
     hygiene_max_tokens: 768
-    reasoning_effort: high
+    reasoning_effort: 75
     rubric_version: 10
 
 output:

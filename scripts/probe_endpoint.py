@@ -42,7 +42,8 @@ def main():
         (args.output / "models.json").write_text(response.text)
         probes = [
             ("thinking", "Solve 17 * 19. Give a short derivation and the answer.",
-             {"enable_thinking": True, "reasoning_effort": "xhigh"}, None),
+             {"enable_thinking": True,
+              "reasoning_effort": config.model.sampling.reasoning_effort}, None),
             ("nonthinking", "Reply with exactly: ready", {"enable_thinking": False}, None),
             ("structured", 'Extract the final answer from "17 * 19 = 323". '
              'Return the numeric answer using the supplied JSON schema.',
@@ -56,6 +57,7 @@ def main():
             )
             if schema:
                 payload["structured_outputs"] = {"json": schema}
+            (args.output / f"{name}-request.json").write_text(json.dumps(payload, indent=2))
             started = time.perf_counter()
             response = client.post("chat/completions", json=payload)
             (args.output / f"{name}.json").write_text(response.text)

@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--inflight", type=int, default=32)
     parser.add_argument("--model")
     parser.add_argument("--tp", type=int)
-    parser.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "none"])
+    parser.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "none"])
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "benchmark.json").write_text(json.dumps(vars(args), default=str, indent=2))

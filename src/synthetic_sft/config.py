@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import Field
 
 from synthetic_sft.schemas import StrictModel
+
+ReasoningEffort = Literal["low", "medium", "high", "xhigh", "max"] | Annotated[
+    int, Field(ge=1, le=100, strict=True)
+]
 
 
 class RunConfig(StrictModel):
@@ -30,7 +34,7 @@ class SamplingConfig(StrictModel):
     max_tokens: int = Field(default=8192, gt=0)
     presence_penalty: float = 0.0
     repetition_penalty: float = Field(default=1.0, gt=0.0)
-    reasoning_effort: str | None = Field(default="medium", pattern=r"^(low|medium|high|xhigh)$")
+    reasoning_effort: ReasoningEffort | None = "medium"
 
 
 class EndpointConfig(StrictModel):
@@ -72,7 +76,7 @@ class JudgeConfig(StrictModel):
     analysis_samples: int = Field(default=2, ge=1, le=4)
     analysis_max_tokens: int = Field(default=2048, gt=0)
     hygiene_max_tokens: int = Field(default=768, gt=0)
-    reasoning_effort: str | None = Field(default="medium", pattern=r"^(low|medium|high|xhigh)$")
+    reasoning_effort: ReasoningEffort | None = "medium"
     rubric_version: int = Field(default=4, ge=1)
 
 
