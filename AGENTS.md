@@ -256,6 +256,9 @@ same model/sampling/checks, four TP1 replicas, 32 active trajectories and a 256-
 replica. It measures replenishment instead of draining after only 32 prompts/GPU. The large-teacher
 1,000-prompt profile now uses continuous scheduling with a fresh `reasoning-productivity-1000-v2`
 run ID. No million-sample production run is authorized by these pilot results.
+The sustained follow-up was submitted as Slurm job **3548372** on September 30, 2026;
+it was pending for priority at 02:46 CEST. Inspect that job and
+`runs/reasoning-throughput-qwen36-1024-v1/` before submitting a duplicate.
 
 Swiss Model Launcher manages vLLM/SGLang deployments; it is not a separate inference engine.
 The [serving leaderboard](https://serving.swissai.svc.cscs.ch/leaderboard) ranks token usage, and
