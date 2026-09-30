@@ -389,6 +389,10 @@ It requests 800 GiB host RAM per node and 75 minutes, with eager loading; Slurm 
 default 450 GiB limit while multiple workers stage large shards in CPU RAM. The actual recipe
 is `runs/reasoning-sml-deepseek41-64-v2/deployment-mem800/`. It was submitted with an afterany
 dependency on the cancelled debug job; check its state before submitting anything else.
+At 04:13, `normal` was blocked by `QOSGrpNodeLimit`; the pending job was moved in place to
+`preemptable`, and the checked-in config now requests that partition. The generated historical
+SBATCH header still says normal; the live Slurm allocation is authoritative. No reservation
+or elevated QOS was requested.
 
 The renderer now accepts `--seeds SAVED_SEEDS` and emits a `pilot.sh` allocation script as well
 as `master.sh`. Submit **pilot.sh** for a single-job trial: `slurm/sml-pilot.sh` starts SML and

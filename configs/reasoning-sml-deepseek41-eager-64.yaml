@@ -85,7 +85,7 @@ slurm:
   # Allow CPU staging of large checkpoint shards without the default 450 GiB limit.
   mem: "800G"
   time: "01:15:00"
-  partition: normal
+  partition: preemptable
   account: infra01
   qos: null
   exclusive: true
