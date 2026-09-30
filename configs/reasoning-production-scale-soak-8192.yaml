@@ -1,0 +1,85 @@
+# Multi-node sustained gate for the exact production model, sources, sampling, and rubric.
+run:
+  run_id: reasoning-production-scale-soak-8192-v1
+  output_dir: ../runs
+  seed: 61
+  resume: true
+
+source:
+  adapter: pool
+  num_samples: 1024
+  system_prompt: null
+  params:
+    sources:
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
+        weight: 0.015
+        subsets: [gsm8k]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production-v3/prompts"
+        weight: 0.985
+        subsets:
+          - calendar_arithmetic
+          - fraction_simplification
+          - gsm_symbolic
+          - knights_knaves
+          - time_intervals
+        difficulty_weights: {easy: 1.0}
+
+model:
+  model_source: /capstor/store/cscs/swissai/infra01/hf_models/models/Qwen/Qwen3.6-35B-A3B-FP8
+  execution: continuous
+  inflight_candidates: 32
+  dtype: auto
+  tensor_parallel_size: 1
+  max_model_len: 24576
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 64
+  max_num_batched_tokens: 4096
+  enable_prefix_caching: true
+  batch_size: 1024
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 8192
+    presence_penalty: 1.5
+    reasoning_effort: null
+
+generation:
+  mode: direct_polish
+  rollouts_per_prompt: 8
+  polish: true
+  polish_max_tokens: 4096
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 1024
+    max_tokens: 1024
+    analysis_samples: 2
+    analysis_max_tokens: 1024
+    hygiene_max_tokens: 768
+    reasoning_effort: null
+    rubric_version: 19
+
+output:
+  parquet_target_mb: 128
+  compression: zstd
+  prepared_shards_per_gpu: 1
+  checkpoint_rows: 256
+  checkpoint_seconds: 300
+
+slurm:
+  nodes: 4
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "02:00:00"
+  partition: preemptable
+  account: infra01
+  qos: null
+  exclusive: true
+  requeue: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.20.sqsh"
