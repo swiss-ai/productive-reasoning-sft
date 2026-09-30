@@ -9,7 +9,12 @@ import yaml
 from synthetic_sft.config import PipelineConfig
 
 
-def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]:
+def build_sbatch_command(
+    config: PipelineConfig,
+    config_path: Path,
+    *,
+    materialize_launch_config: bool = True,
+) -> list[str]:
     if config.model.execution == "endpoint":
         raise ValueError("Deploy endpoint pilots with scripts/render_sml.py, not the Ray launcher")
     slurm = config.slurm
@@ -20,7 +25,11 @@ def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]
 
     log_dir = config.run_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    launch_config = _write_launch_config(config)
+    launch_config = (
+        _write_launch_config(config)
+        if materialize_launch_config
+        else config.run_dir / "manifests" / "launch.resolved.yaml"
+    )
     exported = {
         "SFT_CONFIG": str(launch_config),
         "SFT_ENVIRONMENT": str(slurm.environment),
@@ -62,7 +71,9 @@ def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]
 
 
 def submit(config: PipelineConfig, config_path: Path, *, dry_run: bool = False) -> str:
-    command = build_sbatch_command(config, config_path)
+    command = build_sbatch_command(
+        config, config_path, materialize_launch_config=not dry_run
+    )
     if dry_run:
         return " ".join(command)
     environment = os.environ.copy()
