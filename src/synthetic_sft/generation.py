@@ -512,6 +512,8 @@ class VLLMBatchPredictor:
                     "a verdict contradicts its own feedback; in that case repair the verdict. "
                     "If the feedback says the candidate is correct and the source or reference "
                     "is wrong, the verdict must be reference_conflict, never correct or incorrect. "
+                    "An incorrect verdict requires response score at most 3 and the incorrect "
+                    "issue; a response scored 5 cannot coexist with an incorrect verdict. "
                     "Add every schema-required key: reasoning and response each need an "
                     "issues array, empty only for score 5 and otherwise containing a matching "
                     "issue code. "

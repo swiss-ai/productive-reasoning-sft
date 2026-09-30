@@ -216,6 +216,22 @@ class JudgeScores(StrictModel):
             raise ValueError("hygiene confirmations must have unique categories")
         return value
 
+    @model_validator(mode="after")
+    def correctness_matches_response_grade(self) -> JudgeScores:
+        verdict = self.correctness.verdict
+        response_issues = set(self.response.issues)
+        if verdict == "incorrect" and (
+            self.response.score > 3 or "incorrect" not in response_issues
+        ):
+            raise ValueError(
+                "an incorrect answer requires response score at most 3 and issue incorrect"
+            )
+        if verdict in {"correct", "reference_conflict"} and "incorrect" in response_issues:
+            raise ValueError("a correct answer cannot carry response issue incorrect")
+        if verdict == "indeterminate" and self.response.score > 3:
+            raise ValueError("an unsettled answer cannot be graded training-ready")
+        return self
+
     def effective(self) -> int:
         """The weaker component determines training readiness."""
         return min(self.reasoning.score, self.response.score)
