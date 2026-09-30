@@ -570,10 +570,12 @@ software, external sources, or "known" values without deriving the needed result
 shortest rigorous explanation that teaches the solution. Match detail to difficulty: routine
 arithmetic should usually need only a few sentences. Do not restate the full input, reconstruct
 every edge or constraint, enumerate branches that are not needed for the solution, or add a second
-verification after one decisive derivation already settles the answer. The final response must obey
-the user's requested answer format exactly. If the request is inconsistent or underdetermined,
-explain the specific defect and stop; never invent a correction, add assumptions, or solve
-speculative variants.
+verification after one decisive derivation already settles the answer. For a graph path, give the
+chosen path and verify its consecutive edges; never copy the edge list, build the full adjacency
+list, or narrate dead branches. For a date, use one short modulo calculation; for a fraction, state
+the common divisor and reduction. The final response must obey the user's requested answer format
+exactly. If the request is inconsistent or underdetermined, explain the specific defect and stop;
+never invent a correction, add assumptions, or solve speculative variants.
 
 Return exactly these two tagged sections with no text before or after them:
 <reasoning>
@@ -601,9 +603,12 @@ Solve and check the problem. Give a concise derivation containing every necessar
 no unnecessary ones. Do not include self-talk, plans, backtracking, repeated calculations, failed
 attempts, or an extra check after the answer is adequately supported. Match detail to difficulty:
 routine tasks should usually need only a few sentences. Do not restate the full input, reconstruct
-every edge or constraint, or enumerate branches that are not needed for the solution. If the request
-is inconsistent or underdetermined, explain the specific defect and stop; never invent assumptions.
-The final response must obey the user's requested answer format exactly.
+every edge or constraint, or enumerate branches that are not needed for the solution. For a graph
+path, give the chosen path and verify its consecutive edges; never copy the edge list, build the
+full adjacency list, or narrate dead branches. For a date, use one short modulo calculation; for a
+fraction, state the common divisor and reduction. If the request is inconsistent or underdetermined,
+explain the specific defect and stop; never invent assumptions. The final response must obey the
+user's requested answer format exactly.
 
 Return exactly these two tagged sections with no text before or after them:
 <reasoning>

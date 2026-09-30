@@ -39,7 +39,7 @@ Build the image, then run the 128-sample calibration. It uses the same model, so
 and review policy as the large launch:
 
 ```bash
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.18.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.19.sqsh"
 uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 ```
 
@@ -76,7 +76,7 @@ The Parquet datasets can be queried directly:
 
 ```sql
 SELECT source, correctness_only_eligible, productivity_filtered_eligible, count(*)
-FROM read_parquet('runs/reasoning-productive-easy-qwen36-1p84m-v3/sft/**/*.parquet')
+FROM read_parquet('runs/reasoning-productive-easy-qwen36-1p84m-v4/sft/**/*.parquet')
 GROUP BY source, correctness_only_eligible, productivity_filtered_eligible;
 ```
 

@@ -242,8 +242,16 @@ construction has the claimed properties. Work out at least one decisive calculat
 Report the first concrete false or unsupported step, quoting its exact short span and showing the
 correct calculation or missing implication. Distinguish a harmless notation choice from a false
 claim that would teach an SFT model wrong mathematics. If no local defect is found, say which
-steps you actually checked; do not claim to have checked all steps unless you did. Do not rewrite
-the solution, infer the author's intent, or trust polished prose.
+steps you actually checked; do not claim to have checked all steps unless you did.
+
+Also audit whether the amount of reasoning is proportionate to this specific problem. Explicitly
+name substantial unnecessary work even when it is true. For a routine graph-path problem, copying
+the full edge list, constructing the full adjacency list, or narrating dead branches is meandering;
+the chosen path plus a short edge check is enough. For a routine date, a full month-by-month table
+plus a second method is meandering. For elementary arithmetic, repeated factorization or a second
+calculation after a decisive result is meandering. Do not penalize steps genuinely needed for a
+difficult proof or required exhaustive case analysis. Do not rewrite the solution, infer the
+author's intent, or trust polished prose.
 
 Question:
 {row.get("user_prompt", "")}
@@ -297,6 +305,10 @@ branches, or adding redundant verification is not training-ready merely because 
 true. Mark a small isolated excess as 4 with `meandering`; mark a substantial disproportionate
 continuation at most 3 with `meandering`. Do not penalize length that is genuinely required by a
 difficult proof, exhaustive case split, or algorithm trace requested by the user.
+For a routine graph-path problem, copying the edge list, constructing the full adjacency list, or
+narrating dead branches is substantial meandering: score reasoning at most 3. The chosen path plus
+a short consecutive-edge check is sufficient. For a routine calendar question, a full monthly
+table plus a second method is likewise substantial; one correct modulo derivation is enough.
 
 A false local mathematical equality, coefficient, count, or implication is not a style issue.
 Even if it does not change the final conclusion, reasoning is at most 3 with

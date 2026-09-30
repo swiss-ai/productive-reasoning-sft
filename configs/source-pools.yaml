@@ -4,7 +4,7 @@ raw_dir: "${SCRATCH}/synthetic-sft-sources/raw"
 sources:
   # Large production pool for RL priming: easy, unambiguous, and natively verifiable.
   # Math receives a moderate majority; graph/logic tasks preserve some diversity.
-  - name: reasoning-gym-production-v2
+  - name: reasoning-gym-production-v3
     kind: reasoning_gym
     num_samples: 300000
     seed: 53
@@ -24,11 +24,11 @@ sources:
         tasks:
           - path_star
           - knights_knaves
-    # Avoid the millisecond and timezone variants whose generated references
-    # showed rounding/offset conflicts in the production calibration.
+    # Keep only clock subtraction. Millisecond, date, and datetime variants
+    # showed rounding, parsing, or timezone conflicts in real calibrations.
     task_params:
       time_intervals:
-        task_types: [time, time_seconds, date, datetime]
+        task_types: [time, time_seconds]
 
   # Current RL-priming pools: deliberately easy, answer-extractable tasks.
   - name: reasoning-gym-basic
