@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "none"])
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
+    (args.output / "benchmark.json").write_text(json.dumps(vars(args), default=str, indent=2))
     config = load_config(args.config)
     config.model.max_num_seqs = args.max_num_seqs
     config.model.execution = args.execution
@@ -115,7 +116,12 @@ def main():
             "model": config.model.model_source,
             "execution": config.model.execution,
             "gpus": config.model.tensor_parallel_size,
+            "nodes": config.slurm.nodes if args.execution == "endpoint" else 1,
             "startup_seconds": startup_seconds,
+            "startup_scope": (
+                "client only; server startup excluded"
+                if args.execution == "endpoint" else "local engine"
+            ),
             "started_at_unix": started_at,
             "completed_at_unix": time.time(),
             "batch_size": batch_size,
