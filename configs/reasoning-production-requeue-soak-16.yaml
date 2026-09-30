@@ -1,13 +1,13 @@
 # Exercises automatic watchdog requeue and exact resume on the production path.
 run:
-  run_id: reasoning-production-requeue-soak-512-v1
+  run_id: reasoning-production-requeue-soak-16-v1
   output_dir: ../runs
   seed: 51
   resume: true
 
 source:
   adapter: pool
-  num_samples: 512
+  num_samples: 16
   system_prompt: null
   params:
     sources:
@@ -17,7 +17,7 @@ source:
         difficulty_weights: {easy: 1.0}
       - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-basic/prompts"
         weight: 0.45
-        subsets: [calendar_arithmetic, decimal_arithmetic, fraction_simplification,
+        subsets: [calendar_arithmetic, fraction_simplification,
           gsm_symbolic, prime_factorization, time_intervals, path_star, knights_knaves]
         difficulty_weights: {easy: 1.0}
 
@@ -32,7 +32,7 @@ model:
   max_num_seqs: 64
   max_num_batched_tokens: 4096
   enable_prefix_caching: true
-  batch_size: 128
+  batch_size: 16
   sampling:
     temperature: 1.0
     top_p: 0.95
@@ -52,19 +52,19 @@ quality:
   judge:
     enabled: true
     model_source: null
-    batch_size: 128
+    batch_size: 16
     max_tokens: 1024
     analysis_samples: 2
     analysis_max_tokens: 2048
     hygiene_max_tokens: 768
     reasoning_effort: null
-    rubric_version: 13
+    rubric_version: 14
 
 output:
   parquet_target_mb: 128
   compression: zstd
   prepared_shards_per_gpu: 1
-  checkpoint_rows: 32
+  checkpoint_rows: 1
   checkpoint_seconds: 30
 
 slurm:
@@ -79,4 +79,4 @@ slurm:
   requeue: true
   requeue_before_timeout_seconds: 60
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.13.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.14.sqsh"
