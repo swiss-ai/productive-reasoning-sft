@@ -17,6 +17,7 @@ class RayCluster:
         self.cpus_per_node = cpus_per_node
         self.gpus_per_node = gpus_per_node
         self._manages_ray = False
+        self._completion_file: Path | None = None
 
     def __enter__(self) -> RayCluster:
         if os.environ.get("RAY_ADDRESS"):
@@ -38,6 +39,8 @@ class RayCluster:
 
         ray.shutdown()
         if self._manages_ray:
+            if exc_type is None and self._completion_file is not None:
+                self._completion_file.write_text("completed\n", encoding="utf-8")
             subprocess.run(["ray", "stop", "--force"], check=False)
 
     @staticmethod
@@ -55,6 +58,7 @@ class RayCluster:
         broadcast_dir.mkdir(parents=True, exist_ok=True)
         restart = os.environ.get("SLURM_RESTART_COUNT", "0")
         port_file = broadcast_dir / f"ray_{os.environ['SLURM_JOB_ID']}_{restart}.json"
+        completion_file = port_file.with_suffix(".done")
         subprocess.run(["ray", "stop", "--force"], check=False, capture_output=True)
 
         if node_id == 0:
@@ -76,6 +80,7 @@ class RayCluster:
             temporary.write_text(json.dumps({"address": f"{head_ip}:{port}"}), encoding="utf-8")
             temporary.replace(port_file)
             self._manages_ray = True
+            self._completion_file = completion_file
             self._connect(f"{head_ip}:{port}")
             _wait_for_nodes(len(nodes))
             return
@@ -99,6 +104,8 @@ class RayCluster:
                 "--block",
             ]
         )
+        if code != 0 and completion_file.exists():
+            code = 0
         raise SystemExit(code)
 
 

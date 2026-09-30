@@ -27,8 +27,8 @@ class EndpointPredictor(ContinuousVLLMPredictor):
         endpoint = self.config.model.endpoint
         if endpoint is None:
             raise ValueError("model.endpoint is required for endpoint execution")
-        if self.judge or not self.fused_judge:
-            raise ValueError("Endpoint pilot requires enabled same-model judging")
+        if not self.judge and not self.fused_judge:
+            raise ValueError("Endpoint generation requires enabled same-model judging")
         base_url = os.environ.get(endpoint.base_url_env, "").rstrip("/")
         if not base_url:
             raise ValueError(f"Set {endpoint.base_url_env} to the private server's /v1 URL")

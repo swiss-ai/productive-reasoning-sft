@@ -37,7 +37,16 @@ def main() -> None:
         }
         for row in rows
     }
-    predictor = VLLMBatchPredictor(config.model_dump(mode="json"), judge=True)
+    predictor_type = VLLMBatchPredictor
+    if config.model.execution == "continuous":
+        from synthetic_sft.continuous import ContinuousVLLMPredictor
+
+        predictor_type = ContinuousVLLMPredictor
+    elif config.model.execution == "endpoint":
+        from synthetic_sft.endpoint import EndpointPredictor
+
+        predictor_type = EndpointPredictor
+    predictor = predictor_type(config.model_dump(mode="json"), judge=True)
     predictor._quality(rows)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
