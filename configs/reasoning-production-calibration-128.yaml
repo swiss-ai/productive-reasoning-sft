@@ -1,26 +1,22 @@
-# Throughput/quality arm: a bounded non-thinking solution draft followed by the
-# same independent cleanup and rubric-11 review as the production path.
+# Final quality gate on the exact easy production source mixture.
 run:
-  run_id: reasoning-basic-qwen36-bounded-polish-calibration-64-v7
+  run_id: reasoning-production-calibration-128-v1
   output_dir: ../runs
-  seed: 49
+  seed: 55
   resume: true
 
 source:
   adapter: pool
-  num_samples: 64
+  num_samples: 128
   system_prompt: null
   params:
     sources:
       - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
-        weight: 0.40
-        subsets: [gsm8k, orca_math]
+        weight: 0.015
+        subsets: [gsm8k]
         difficulty_weights: {easy: 1.0}
-      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-basic/prompts"
-        weight: 0.60
-        subsets: [calendar_arithmetic, decimal_arithmetic, fraction_simplification,
-          gsm_symbolic, number_format, prime_factorization, time_intervals,
-          path_star, knights_knaves, syllogism]
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production/prompts"
+        weight: 0.985
         difficulty_weights: {easy: 1.0}
 
 model:
@@ -34,7 +30,7 @@ model:
   max_num_seqs: 64
   max_num_batched_tokens: 4096
   enable_prefix_caching: true
-  batch_size: 64
+  batch_size: 128
   sampling:
     temperature: 1.0
     top_p: 0.95
@@ -55,19 +51,19 @@ quality:
   judge:
     enabled: true
     model_source: null
-    batch_size: 64
+    batch_size: 128
     max_tokens: 1024
     analysis_samples: 2
     analysis_max_tokens: 1024
     hygiene_max_tokens: 768
     reasoning_effort: null
-    rubric_version: 15
+    rubric_version: 16
 
 output:
   parquet_target_mb: 64
   compression: zstd
   prepared_shards_per_gpu: 1
-  checkpoint_rows: 16
+  checkpoint_rows: 32
   checkpoint_seconds: 60
 
 slurm:
@@ -81,4 +77,4 @@ slurm:
   exclusive: true
   requeue: true
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.15.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.17.sqsh"

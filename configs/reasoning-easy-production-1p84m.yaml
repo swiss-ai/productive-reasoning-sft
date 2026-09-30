@@ -1,7 +1,7 @@
 # Launch candidate only. Do not submit until the bounded-polish calibration and
 # multi-node resume/scale soak have passed manual review.
 run:
-  run_id: reasoning-productive-easy-qwen36-1p84m-v1
+  run_id: reasoning-productive-easy-qwen36-1p84m-v2
   output_dir: ../runs
   seed: 47
   resume: true
@@ -16,19 +16,12 @@ source:
   params:
     sources:
       - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
-        weight: 0.55
-        subsets: [gsm8k, orca_math]
+        # Keep the full finite GSM8K slice; exclude the much noisier Orca tail.
+        weight: 0.015
+        subsets: [gsm8k]
         difficulty_weights: {easy: 1.0}
-      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-basic/prompts"
-        weight: 0.45
-        subsets:
-          - calendar_arithmetic
-          - fraction_simplification
-          - gsm_symbolic
-          - prime_factorization
-          - time_intervals
-          - path_star
-          - knights_knaves
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-production/prompts"
+        weight: 0.985
         difficulty_weights: {easy: 1.0}
 
 model:
@@ -65,10 +58,10 @@ quality:
     batch_size: 1024
     max_tokens: 1024
     analysis_samples: 2
-    analysis_max_tokens: 2048
+    analysis_max_tokens: 1024
     hygiene_max_tokens: 768
     reasoning_effort: null
-    rubric_version: 14
+    rubric_version: 16
 
 output:
   parquet_target_mb: 256
@@ -91,4 +84,4 @@ slurm:
   requeue: true
   requeue_before_timeout_seconds: 300
   environment: ../container/cscs.toml
-  image: "${SCRATCH}/images/synthetic-sft-v0.14.sqsh"
+  image: "${SCRATCH}/images/synthetic-sft-v0.17.sqsh"

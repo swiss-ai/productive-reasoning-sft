@@ -2,6 +2,29 @@ output_dir: "${SCRATCH}/synthetic-sft-sources/pools"
 raw_dir: "${SCRATCH}/synthetic-sft-sources/raw"
 
 sources:
+  # Large production pool for RL priming: easy, unambiguous, and natively verifiable.
+  # Math receives a moderate majority; graph/logic tasks preserve some diversity.
+  - name: reasoning-gym-production
+    kind: reasoning_gym
+    num_samples: 300000
+    seed: 53
+    workers: 64
+    task_chunk_size: 1000
+    difficulty_weights: {easy: 1.0}
+    task_groups:
+      math:
+        weight: 0.75
+        tasks:
+          - calendar_arithmetic
+          - fraction_simplification
+          - gsm_symbolic
+          - time_intervals
+      logic:
+        weight: 0.25
+        tasks:
+          - path_star
+          - knights_knaves
+
   # Current RL-priming pools: deliberately easy, answer-extractable tasks.
   - name: reasoning-gym-basic
     kind: reasoning_gym
