@@ -143,27 +143,29 @@ view. `quality_details_json` follows schema version 9; the current prompt policy
 
 ## Production candidate
 
-The production launch is `configs/reasoning-easy-production-1p89m.yaml`:
+The production launch is `configs/reasoning-easy-production-6m.yaml`:
 
 - teacher/judge: Qwen3.6-35B-A3B-FP8, four independent TP1 replicas per 4xGH200 node;
 - no effort label: this model supports thinking but its template does not expose Qwen effort
   controls;
-- 210,000 unique elementary prompts, nine stochastic rollouts each, 1.89 million candidates;
+- 600,000 unique elementary prompts, ten stochastic rollouts each, 6 million candidates;
 - 20 preemptible nodes, one Slurm submission, automatic restart before each 24-hour limit;
 - continuous scheduling with 32 active trajectories and 1,024 queued candidates per GPU actor;
 - draft limit 8,192, polish limit 4,096, two 1,024-token critics, and four 768-token focused checks;
 - atomic checkpoints every 256 completed rows or 300 seconds.
 
-The source mix is 1.5% Numina GSM8K and 98.5% a purpose-built Reasoning Gym pool. The full pool has
-251,205 unique prompts; the launch samples only these five calibrated tasks:
+The source mix is 0.5% Numina GSM8K and 99.5% a purpose-built Reasoning Gym pool. The reusable
+`reasoning-gym-production-v4` pool has 910,921 unique prompts. The production seeds use this exact
+composition:
 
-| Task | Pool size | Intended role |
-|---|---:|---|
-| calendar arithmetic | 27,449 | short modular/date reasoning |
-| fraction simplification | 39,199 | elementary exact arithmetic |
-| symbolic GSM | 53,823 | varied short word problems |
-| time intervals | 55,734 | simple clock subtraction |
-| knights and knaves | 37,500 | compact logic |
+| Source/task | Unique prompts | Candidates after 10 rollouts | Intended role |
+|---|---:|---:|---|
+| Numina GSM8K | 3,000 | 30,000 | external elementary-math anchor |
+| calendar arithmetic | 24,000 | 240,000 | short modular/date reasoning |
+| fraction simplification | 35,000 | 350,000 | elementary exact arithmetic |
+| symbolic GSM | 270,000 | 2,700,000 | varied short word problems |
+| knights and knaves | 172,000 | 1,720,000 | compact logic |
+| time intervals | 96,000 | 960,000 | simple clock subtraction |
 
 Time-interval generation is restricted to minute- and second-resolution clock subtraction. Date,
 datetime, millisecond, and timezone forms were removed after real calibration exposed parsing,
@@ -172,8 +174,8 @@ launch: 10/17 calibration samples were rejected, while some clearly exhaustive s
 passed, so its productivity labels were not reliable enough. Orca Math was removed because
 ambiguity and repaired-premise behavior dominated its failures. Decimal arithmetic and
 gimmicky/challenge Reasoning Gym tasks are also excluded. The prepared production seeds contain
-210,000 unique IDs with no path-star rows under
-`runs/reasoning-productive-easy-qwen36-1p89m-v1/prepared/seeds/`.
+exactly 600,000 unique IDs with the counts above and no path-star rows under
+`runs/reasoning-productive-easy-qwen36-6m-v1/prepared/seeds/`.
 
 The source is intentionally easy and unambiguous. This dataset is meant to teach clean completion
 and stopping before RL, not to replace RL with hard synthetic SFT. Difficulty and source-specific
@@ -192,10 +194,19 @@ bottleneck. Do not sum overlapping request durations as GPU wall time.
 - A one-node, 1,024-prompt full-pipeline run reached 1,266 candidates/hour after engines were
   ready and 1,214/hour including startup. It used the older noisy source mix and policy, so its
   useful-yield rate is not a production quality estimate.
-- A later two-node, 2,048-candidate soak reached about 3,450 candidates/node-hour including
-  startup and roughly 4,250/node-hour warm. At that measured rate, 1.89 million candidates on 20
-  nodes require about 27.4 wall-clock hours (about 548 node-hours), before queue/preemption overhead. This is comfortably
-  inside a 1,000-node-hour budget but remains a projection until the large launch runs.
+- The exact four-node production-path soak was Slurm job 3549813. It completed all 8,192 unique
+  candidates and final exports in 21:21. The generation/review stage took 1,172.7 seconds including
+  engine startup and tail drain: 6,287 candidates/node-hour. After engines were ready, the bounded
+  run including its tail was about 6,986 candidates/node-hour. All 16 actors stayed fed.
+- The production source weights are about 7% more output-heavy than that soak. Conservatively
+  scaling the warm rate gives about 6,529 candidates/node-hour. Six million candidates therefore
+  project to about 46.0 wall-clock hours on 20 nodes, or about 920 node-hours, plus only the small
+  final CPU export. This is an evidence-based projection with roughly 8% budget margin, not a
+  guarantee against queue delays or unusual preemption churn.
+- The full topology gate was Slurm job 3549885: exactly 20 nodes, 80 TP1 actors, and 10,240 unique
+  candidates. It completed all manifests with exit `0:0` in 10:50. The generation/review stage took
+  414.1 seconds. Its 128 rows per actor intentionally test topology, not steady-state rate; startup
+  and tail drain dominate this bounded run.
 - Critics consumed most non-draft output. Reducing each critic from 2,048 to 1,024 tokens roughly
   halved critic tokens and reduced median critic latency from about 28 to 15 seconds. The small
   bounded comparison improved end-to-end time only about 7% because requests overlap. Keep the
@@ -216,47 +227,38 @@ received the pre-timeout signal, and requeued. The restarted two-node allocation
 rendezvous and completion sentinels include the Slurm restart count, so workers cannot attach to a
 stale head process.
 
+The v0.21 image adds an unconstrained, schema-validated recovery only after both structured arbiter
+attempts fail. On the 20-node topology gate, 148/10,240 rows reached this fallback and 147 recovered;
+one malformed result remained an explicit conservative judge error (0.01%). This reduced the prior
+1.37% structured-decoding failure rate without relaxing any validator or eligibility rule.
+
 ## Calibration evidence and inspection
 
-The rubric-16 production-source calibration (`reasoning-production-calibration-128-v1`) completed
-all 128 candidates in 4:08. It produced 121 strict rows, 122 correctness-only rows, and scores
-`0:2, 2:1, 3:4, 5:121`; all generation calls completed. Manual review found:
+Rubrics 16-18 exposed overlong graph/date reasoning and insufficiently problem-relative judging.
+Rubric 19 is the current policy: one deep correctness critique plus one short direct productivity
+critique. Graph paths and unstable time variants were removed rather than trusting noisy labels.
 
-- one genuinely wrong weekday and one genuinely wrong day-count were conservatively rejected;
-- three correct time answers conflicted with faulty millisecond/timezone references and were kept
-  out of the strict view;
-- one correct timezone answer was also conservatively rejected after an arbiter arithmetic error;
-- the focused checks did not fabricate a confirmed hygiene defect, but two unanchored/unsupported
-  findings remained uncertainty;
-- several accepted graph/date traces were correct yet disproportionally long, motivating rubric 17
-  and the tighter polish prompt.
+The final exact-source calibration is `reasoning-production-calibration-128-v6`, Slurm job 3549984.
+It used the v4 pool, production weights, v0.21 image, generation settings, and rubric 19:
 
-The rubric-17 follow-up reduced median reasoning from 324 to 236 tokens and the longest strict pass
-from 2,209 to 1,135. It also exposed two accepted graph traces that still copied the input and
-enumerated dead branches. Rubric 18 therefore makes the second critique explicitly audit
-problem-relative length, with concrete graph/date/arithmetic criteria; generic concision wording
-was not sufficient.
-
-Rubric 19 separates the critics into a deep thinking correctness wave and a direct productivity
-wave. In the exact no-path production mix, Slurm job 3549808 completed 128/128 candidates in 3:35:
-
-- scores were `0:1, 3:34, 5:93`; 125 rows were correctness-only eligible and 93 entered the strict
+- 128/128 unique candidates completed with no incomplete generations or judge errors;
+- scores were `2:3, 3:27, 5:98`; 122 rows were correctness-only eligible and 98 entered the strict
   view;
-- all generations completed; correctness was 125 verified, two reference/extractor conflicts,
-  and one confirmed incorrect answer;
-- hygiene was 126 passed, one failed, and one indeterminate;
-- reasoning length was 177 tokens at the median, 530 at p90, 599 at p95, and 835 maximum;
-- the filter caught a same-day flight incorrectly treated as crossing midnight, redundant second
-  methods, full calendar enumerations, unnecessary primality proofs, and repeated logic checks;
-- manual review covered every rejection and the 15 longest strict passes. The retained long tail
-  consisted of substantive logic derivations and self-contained arithmetic, not graph-search
-  rabbit holes.
+- correctness was 123 verified and five conservative reference conflicts; hygiene was 124 passed,
+  one failed, and three indeterminate;
+- reasoning length was 192 tokens at the median, 607 at p90, 672 at p95, and 1,781 maximum;
+- manual review covered every rejection and the 15 longest strict passes. It found useful rejection
+  of an inconsistent source problem, circular date checking, unnecessary second derivations, and
+  disproportionate routine arithmetic. The retained long tail was substantive three-person logic
+  with at most one consistency check. No obvious unsafe false pass was found.
 
-This gate demonstrates useful conservative behavior, not a statistical estimate of filter error.
-Several correct rows were deliberately excluded for modest redundancy, and one malformed answer
-extraction created a conservative reference conflict. Every row remains queryable, so those false
-positives reduce strict yield rather than delete data. The production candidate is ready for owner
-approval, but the 20-node job has not been submitted.
+Several correct rows are deliberately excluded for borderline redundant checking. That is a
+conservative yield loss, not deletion: every candidate remains queryable. A malformed Numina
+reference extraction also caused one correct candidate to be excluded. The strict flag is not a
+statistically calibrated classifier; the matched SFT/RL ablation remains the research test.
+
+The production candidate is ready for owner approval, but the 20-node production job has not been
+submitted.
 
 Inspect a completed run with:
 
@@ -280,9 +282,9 @@ large launch:
 
 ```bash
 uv run synthetic-sft build-pools configs/source-pools.yaml
-./container/build.sh "$SCRATCH/images/synthetic-sft-v0.20.sqsh"
+./container/build.sh "$SCRATCH/images/synthetic-sft-v0.21.sqsh"
 uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
-uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-1p89m.yaml
+uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-6m.yaml
 ```
 
 Do not submit the 20-node launch without explicit owner approval. Use a new `run_id` whenever the
