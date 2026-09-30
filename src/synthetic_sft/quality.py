@@ -315,6 +315,10 @@ finding whose verdict is `defect`, independently inspect its quoted evidence and
 really proves that specific failure, `rejected` when the claim is wrong or belongs to a different
 quality category, and `uncertain` when it cannot be settled. Do not return confirmations for
 `clear` or `uncertain` focused findings. A focused checker's confident wording is not evidence.
+Reject a focused finding that merely identifies a mathematical, rounding, interpretation, or
+proof error without proving the named productivity failure. In particular, `no_new_progress`
+requires a substantial unproductive continuation, `unresolved_branch` requires a genuinely open
+alternative or contradiction, and repetition across distinct cases is useful rather than wasteful.
 
 For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
 the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence

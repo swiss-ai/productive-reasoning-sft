@@ -26,7 +26,9 @@ _FOCUS = {
     "repetition": (
         "Find repeated text, calculations, or solution steps that add no useful change. "
         "A brief recap, recurring notation, or a revised step with a meaningful correction "
-        "is not a defect."
+        "is not a defect. Applying the same method to distinct cases, candidates, constraints, "
+        "or inputs is useful progress, not repetition. Return clear unless substantially the "
+        "same work or result is repeated without new information."
     ),
     "circular_rechecking": (
         "Find repeated validation of an already settled result using substantially the same "
@@ -38,16 +40,20 @@ _FOCUS = {
         "nor adds a useful check. Compare early and late passages after a result is already "
         "established: recomputing the same digits or retrying ruled-out guesses is a defect, "
         "even if the trace eventually finds the answer. Do not penalize necessary exploration "
-        "or length by itself. Judge the visible work, not whether a draft later stops."
+        "or length by itself. Judge the visible work, not whether a draft later stops. This is "
+        "not a generic correctness check: a local error, unsupported assumption, missing case, "
+        "rounding choice, or failure to discuss an alternative is not no-new-progress. Return "
+        "clear unless you can quote a substantial unproductive stretch."
     ),
     "unresolved_branch": (
         "Find a material contradiction that the trace leaves unresolved, or a conclusion that "
         "relies on a branch the trace explicitly says it abandoned or left incomplete. Invoking "
         "an unproved theorem is a proof-quality issue, not an abandoned branch. An explicitly "
-        "corrected mistake is not a defect. Lack of proof, suspected arithmetic errors, and "
-        "answer correctness belong to the separate correctness review. Do not invent a "
-        "letter-count or constraint mismatch. If there are no exact incompatible statements "
-        "or no explicit abandoned branch, return clear."
+        "corrected mistake is not a defect. Normal calculation state changes such as carrying, "
+        "borrowing, substitution, or updating an estimate are not contradictions. Local arithmetic, "
+        "rounding, precision, premise-interpretation, and proof errors belong to the separate "
+        "correctness review. If no genuine alternative or contradictory claim remains open when "
+        "the conclusion is reached, return clear."
     ),
 }
 
