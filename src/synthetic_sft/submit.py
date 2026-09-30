@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import yaml
+
 from synthetic_sft.config import PipelineConfig
 
 
@@ -18,10 +20,13 @@ def build_sbatch_command(config: PipelineConfig, config_path: Path) -> list[str]
 
     log_dir = config.run_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
+    launch_config = _write_launch_config(config)
     exported = {
-        "SFT_CONFIG": str(config_path.resolve()),
+        "SFT_CONFIG": str(launch_config),
         "SFT_ENVIRONMENT": str(slurm.environment),
-        "SFT_PROJECT_DIR": str(project_dir),
+        # Execute the source baked into the versioned image. The host repository is
+        # intentionally not on the runtime import path during a long resumable run.
+        "SFT_PROJECT_DIR": "/opt/synthetic-sft",
         "SFT_IMAGE": os.path.expandvars(slurm.image),
         "RAY_PORT_BROADCAST_DIR": str(config.run_dir / "cluster"),
     }
@@ -78,3 +83,20 @@ def _project_root() -> Path:
     if (candidate / "slurm" / "job.sbatch").exists():
         return candidate
     raise FileNotFoundError("run submission from the synthetic-sft repository root")
+
+
+def _write_launch_config(config: PipelineConfig) -> Path:
+    path = config.run_dir / "manifests" / "launch.resolved.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = config.model_dump(mode="json")
+    if path.exists():
+        previous = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if previous != payload:
+            raise RuntimeError(
+                f"run_id {config.run.run_id!r} already has a different launch configuration"
+            )
+        return path
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    temporary.replace(path)
+    return path
