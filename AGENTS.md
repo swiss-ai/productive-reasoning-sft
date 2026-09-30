@@ -258,10 +258,19 @@ reference extraction also caused one correct candidate to be excluded. The stric
 statistically calibrated classifier; the matched SFT/RL ablation remains the research test.
 
 The owner approved the production launch. Slurm job **3551775** was submitted on 2026-09-30 at
-13:09 CEST and initially entered `PENDING (Priority)`. It requests the resolved 6M-candidate
-configuration above: 20 preemptible nodes, 80 GPUs, a 24-hour limit, and automatic requeue. Inspect
-this job and its run directory before submitting anything else; do not create a duplicate while it
-is pending, running, or resumable.
+13:09 CEST with the resolved 6M-candidate configuration above. It was preempted six times: after
+6:54:06, then after 2:08, 4:14, 26:27, 11:12, and 14:41. Slurm then placed it in `REQUEUE_HOLD`
+with reason `launch_failure_limit_exceeded_requeued_held`; accounting records every ended attempt
+as `PREEMPTED` with exit `0:0`, and the final log shows all 80 actors serving requests immediately
+before `SIGTERM`. This is scheduler preemption churn, not a pipeline exception.
+
+The checkpoints contain 1,088,297 unique candidates with zero duplicates: 1,047,856 are
+correctness-only eligible and 869,484 are productivity-filtered eligible. The six allocations used
+about 157.6 node-hours and achieved roughly 6,905 candidates/node-hour including repeated startup
+losses. At that realized rate, the remaining 4,911,703 candidates need about 35.6 active wall-clock
+hours on 20 nodes, keeping the projected total near 869 node-hours. The held job requires an
+explicit `scontrol release 3551775` or an intentional replacement submission. Inspect this job and
+its run directory before acting; never create a concurrent duplicate against the same checkpoints.
 
 Inspect a completed run with:
 
