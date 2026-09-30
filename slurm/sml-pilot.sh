@@ -27,7 +27,7 @@ client_step=(srun --overlap --nodes=1 --ntasks=1 --cpus-per-task=16 --cpu-bind=n
     --nodelist="$sml_head" --environment="$SFT_CLIENT_ENVIRONMENT")
 run_client() {
     "${client_step[@]}" python scripts/probe_endpoint.py "$config" "$run_dir/probes" \
-        --wait-seconds 3300
+        --wait-seconds 10800
     "${client_step[@]}" python scripts/benchmark_pipeline.py "$config" "$seeds" \
         "$run_dir/benchmark" --execution endpoint --samples "$samples" \
         --batch-sizes "$samples" --inflight "$inflight" --max-num-batched-tokens "$prefill"

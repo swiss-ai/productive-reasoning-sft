@@ -1,0 +1,98 @@
+# Long-lived SML validation on elementary RL-priming prompts. The service remains
+# available after this initial client so more experiments can reuse loaded weights.
+run:
+  run_id: reasoning-sml-deepseek41-basic-64-v1
+  output_dir: ../runs
+  seed: 48
+  resume: true
+
+source:
+  adapter: pool
+  num_samples: 64
+  system_prompt: null
+  params:
+    sources:
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
+        weight: 0.25
+        subsets: [gsm8k, orca_math]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-basic/prompts"
+        weight: 0.75
+        subsets:
+          - simple_geometry
+          - calendar_arithmetic
+          - decimal_arithmetic
+          - dice
+          - fraction_simplification
+          - gsm_symbolic
+          - number_format
+          - prime_factorization
+          - time_intervals
+          - course_schedule
+          - family_relationships
+          - path_star
+          - shortest_path
+          - knights_knaves
+          - syllogism
+        difficulty_weights: {easy: 1.0}
+
+model:
+  model_source: /capstor/store/cscs/swissai/infra01/hf_models/models/deepseek-ai/DeepSeek-V4.1-Flash
+  execution: endpoint
+  endpoint:
+    served_model_name: tchu/productive-reasoning-deepseek-v41
+  inflight_candidates: 32
+  dtype: auto
+  safetensors_load_strategy: prefetch
+  tensor_parallel_size: 8
+  max_model_len: 24576
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 64
+  max_num_batched_tokens: 4096
+  enable_prefix_caching: true
+  batch_size: 64
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: -1
+    max_tokens: 8192
+    presence_penalty: 0.0
+    reasoning_effort: 25
+
+generation:
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 4096
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 32
+    max_tokens: 768
+    analysis_samples: 2
+    analysis_max_tokens: 2048
+    hygiene_max_tokens: 768
+    reasoning_effort: 75
+    rubric_version: 10
+
+output:
+  parquet_target_mb: 64
+  compression: zstd
+  prepared_shards_per_gpu: 1
+  checkpoint_rows: 32
+  checkpoint_seconds: 60
+
+slurm:
+  nodes: 2
+  gpus_per_node: 4
+  cpus_per_node: 288
+  mem: "800G"
+  time: "04:00:00"
+  partition: preemptable
+  account: infra01
+  qos: null
+  exclusive: true
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.6.sqsh"
