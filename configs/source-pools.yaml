@@ -2,6 +2,36 @@ output_dir: "${SCRATCH}/synthetic-sft-sources/pools"
 raw_dir: "${SCRATCH}/synthetic-sft-sources/raw"
 
 sources:
+  # Larger unique pool for the 1,000-node-hour launch. Finite calendar,
+  # fraction, and clock spaces stay present but most capacity goes to the two
+  # task families that continue producing varied easy instances.
+  - name: reasoning-gym-production-v4
+    kind: reasoning_gym
+    num_samples: 1000000
+    seed: 71
+    workers: 64
+    task_chunk_size: 1000
+    difficulty_weights: {easy: 1.0}
+    task_groups:
+      calendar:
+        weight: 0.05
+        tasks: [calendar_arithmetic]
+      fractions:
+        weight: 0.05
+        tasks: [fraction_simplification]
+      word_problems:
+        weight: 0.45
+        tasks: [gsm_symbolic]
+      logic:
+        weight: 0.35
+        tasks: [knights_knaves]
+      clocks:
+        weight: 0.10
+        tasks: [time_intervals]
+    task_params:
+      time_intervals:
+        task_types: [time, time_seconds]
+
   # Large production pool for RL priming: easy, unambiguous, and natively verifiable.
   # Math receives a moderate majority; graph/logic tasks preserve some diversity.
   - name: reasoning-gym-production-v3
