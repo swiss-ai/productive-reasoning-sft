@@ -118,7 +118,7 @@ incomplete generation, or failure of the core arbiter. A confirmed material hygi
 the score at 2; hygiene uncertainty, including a failed focused check, caps it at 3 rather than
 mislabeling the candidate incorrect. Known-answer conflicts/indeterminate verification are capped
 at 3. A substantive issue code also caps a rubric-inconsistent score of 4 at 3. All causes are
-explicit in `quality_details_json` (schema version 8). Malformed arbiter JSON gets one bounded
+explicit in `quality_details_json` (schema version 9). Malformed arbiter JSON gets one bounded
 retry; a focused-check parsing failure remains an explicit uncertainty.
 
 Deterministic verification is deliberately typed: numeric expressions, equations, and sets use

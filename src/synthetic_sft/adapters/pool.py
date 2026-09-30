@@ -83,7 +83,25 @@ class PoolAdapter(SourceAdapter):
             if verification.get("source_dataset"):
                 from synthetic_sft.adapters.reasoning_gym import ReasoningGymAdapter
 
-                return ReasoningGymAdapter().verify(record, response)
+                native = ReasoningGymAdapter().verify(record, response)
+                # Some native fuzzy scorers award partial credit to an exactly equivalent
+                # formatted answer (for example 106.0 versus 106). Prefer a successful typed
+                # equivalence check when both independently extracted answers are available;
+                # otherwise retain the task's native result.
+                candidate = _extracted_answer(record.get("answer_json"))
+                reference = _extracted_answer(record.get("reference_answer_json"))
+                if candidate is not None and reference is not None:
+                    typed = _verify_extracted(reference, candidate)
+                    if typed is not None and typed.score == 1.0:
+                        return VerificationResult(
+                            score=1.0,
+                            details={
+                                "method": "reasoning_gym_native_or_typed_equivalence",
+                                "native_score": native.score,
+                                "typed_details": typed.details,
+                            },
+                        )
+                return native
             answer = verification.get("entry", {}).get("answer")
             if answer is None or str(answer).strip() == "":
                 return VerificationResult(score=None)

@@ -9,6 +9,7 @@ from typing import Any
 
 from synthetic_sft.schemas import (
     HygieneCategory,
+    HygieneConfirmation,
     HygieneDetails,
     HygieneFinding,
     ModelHygieneAssessment,
@@ -157,7 +158,11 @@ def parse_hygiene_assessment(
 
 
 def build_hygiene_details(
-    row: Mapping[str, Any], *, enabled: bool, model: str | None
+    row: Mapping[str, Any],
+    *,
+    enabled: bool,
+    model: str | None,
+    confirmations: list[HygieneConfirmation] | None = None,
 ) -> HygieneDetails:
     findings = _deterministic_findings(row)
     if enabled:
@@ -166,17 +171,56 @@ def build_hygiene_details(
             semantic = [HygieneFinding.model_validate(item) for item in json.loads(str(raw))]
         except Exception:
             semantic = []
+        confirmation_by_category = {
+            item.category: item for item in (confirmations or [])
+        }
         for category in SEMANTIC_CATEGORIES:
             matching = [
                 item for item in semantic if item.category == category and item.method == "model"
             ]
-            findings.append(
-                matching[0]
-                if len(matching) == 1
-                else _uncertain(
-                    category, "focused model check did not complete", error="missing check"
+            if len(matching) != 1:
+                findings.append(
+                    _uncertain(category, "focused model check did not complete", error="missing check")
                 )
-            )
+                continue
+            finding = matching[0]
+            if finding.verdict != "defect":
+                findings.append(finding)
+                continue
+            confirmation = confirmation_by_category.get(category)
+            if confirmation is None:
+                findings.append(
+                    HygieneFinding(
+                        category=category,
+                        verdict="uncertain",
+                        method="model",
+                        evidence=finding.evidence,
+                        explanation="The focused defect was not confirmed by the final arbiter.",
+                        error="missing arbiter confirmation",
+                    )
+                )
+            elif confirmation.verdict == "confirmed_defect":
+                findings.append(finding)
+            elif confirmation.verdict == "rejected":
+                findings.append(
+                    HygieneFinding(
+                        category=category,
+                        verdict="clear",
+                        method="model",
+                        evidence=finding.evidence,
+                        explanation=f"Final arbiter rejected focused defect: {confirmation.feedback}",
+                    )
+                )
+            else:
+                findings.append(
+                    HygieneFinding(
+                        category=category,
+                        verdict="uncertain",
+                        method="model",
+                        evidence=finding.evidence,
+                        explanation=f"Final arbiter could not confirm focused defect: {confirmation.feedback}",
+                    )
+                )
     failures = list(dict.fromkeys(item.category for item in findings if item.verdict == "defect"))
     errors = [f"{item.category}: {item.error}" for item in findings if item.error]
     if failures:

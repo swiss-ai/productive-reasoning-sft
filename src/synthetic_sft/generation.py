@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -279,9 +280,9 @@ class VLLMBatchPredictor:
             )
         )
         self._run_critiques(records)
+        self._run_hygiene(records)
         self._arbitrate(records)
         self._retry_failed_arbitrations(records)
-        self._run_hygiene(records)
         for row in records:
             self._finalize_quality(row)
 
@@ -405,6 +406,10 @@ class VLLMBatchPredictor:
                     "judge_generation_error", "answer extraction failed"
                 )
         for row in records:
+            fallback = _atomic_candidate_fallback(row)
+            if fallback is not None:
+                row["answer_json"] = canonical_json(fallback.model_dump(mode="json"))
+                row["candidate_answer_method"] = "atomic_response_fallback"
             fallback = _atomic_reference_fallback(row)
             if fallback is not None:
                 row["reference_answer_json"] = canonical_json(fallback.model_dump(mode="json"))
@@ -750,3 +755,33 @@ def _atomic_reference_fallback(row: dict[str, Any]) -> AnswerExtraction | None:
         answer_type=candidate.answer_type,
         value=text,
     )
+
+
+_ATOMIC_NUMBER = re.compile(
+    r"^[\$€£]?\s*[+-]?(?:\d{1,3}(?:,\d{3})+|\d+|\d*\.\d+)"
+    r"(?:[eE][+-]?\d+)?%?\s*(?:[A-Za-z°]+)?$"
+)
+
+
+def _atomic_candidate_fallback(row: dict[str, Any]) -> AnswerExtraction | None:
+    """Recover a short literal response when the model extractor calls it absent."""
+    response = str(row.get("response") or "").strip()
+    if not response or len(response) > 120 or len(response.splitlines()) > 2:
+        return None
+    try:
+        candidate = AnswerExtraction.model_validate_json(str(row.get("answer_json") or ""))
+    except Exception:
+        return None
+    if candidate.status != "no_answer":
+        return None
+
+    normalized = response.strip("` ")
+    if _ATOMIC_NUMBER.fullmatch(normalized):
+        answer_type = "number"
+    elif normalized.casefold() in {"true", "false", "yes", "no"}:
+        answer_type = "boolean"
+    elif re.fullmatch(r"[A-Ea-e]", normalized):
+        answer_type = "choice"
+    else:
+        answer_type = "text"
+    return AnswerExtraction(status="extracted", answer_type=answer_type, value=normalized)

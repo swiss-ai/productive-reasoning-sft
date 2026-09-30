@@ -86,7 +86,7 @@ class AnswerExtraction(StrictModel):
 class AnswerDetails(StrictModel):
     candidate: AnswerExtraction | None = None
     reference: AnswerExtraction | None = None
-    candidate_method: Literal["model"] | None = None
+    candidate_method: Literal["model", "atomic_response_fallback"] | None = None
     reference_method: Literal["model", "atomic_source_fallback"] | None = None
 
 
@@ -160,10 +160,29 @@ class ResponseAssessment(StrictModel):
         return self
 
 
+class HygieneConfirmation(StrictModel):
+    category: Literal[
+        "repetition", "circular_rechecking", "no_new_progress", "unresolved_branch"
+    ]
+    verdict: Literal["confirmed_defect", "rejected", "uncertain"]
+    feedback: str = Field(min_length=1, max_length=300)
+
+
 class JudgeScores(StrictModel):
     correctness: CorrectnessAssessment
     reasoning: ReasoningAssessment
     response: ResponseAssessment
+    hygiene_confirmations: list[HygieneConfirmation] = Field(default_factory=list, max_length=4)
+
+    @field_validator("hygiene_confirmations", mode="after")
+    @classmethod
+    def hygiene_categories_are_unique(
+        cls, value: list[HygieneConfirmation]
+    ) -> list[HygieneConfirmation]:
+        categories = [item.category for item in value]
+        if len(categories) != len(set(categories)):
+            raise ValueError("hygiene confirmations must have unique categories")
+        return value
 
     def effective(self) -> int:
         """The weaker component determines training readiness."""
@@ -294,7 +313,7 @@ class QualityDecision(StrictModel):
 
 
 class QualityDetails(StrictModel):
-    schema_version: Literal[8] = 8
+    schema_version: Literal[9] = 9
     aggregate_score: int | None = Field(default=None, ge=0, le=5)
     decision: QualityDecision
     answer: AnswerDetails

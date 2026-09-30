@@ -307,6 +307,13 @@ substantive defects, never minor style issues: response quality is at most 3, an
 For every reasoning or response score below 5, select at least one matching issue code in addition
 to the concise feedback. A score of 5 must have no issues.
 
+The focused hygiene checks below are narrow claims, not authoritative verdicts. For every focused
+finding whose verdict is `defect`, independently inspect its quoted evidence and return one
+`hygiene_confirmations` item with the same category. Use `confirmed_defect` only when the evidence
+really proves that specific failure, `rejected` when the claim is wrong or belongs to a different
+quality category, and `uncertain` when it cannot be settled. Do not return confirmations for
+`clear` or `uncertain` focused findings. A focused checker's confident wording is not evidence.
+
 For correctness, use `incorrect` only for a confirmed wrong answer, `reference_conflict` only when
 the supplied reference is demonstrably unreliable, and `indeterminate` when the available evidence
 cannot settle correctness. High confidence requires direct verification, a sound derivation, or a
@@ -336,6 +343,9 @@ Candidate reasoning:
 
 Candidate response:
 {row.get("response") or "(missing)"}
+
+Focused hygiene findings:
+{row.get("hygiene_findings_json") or "[]"}
 
 {rendered}
 """
@@ -426,6 +436,7 @@ class FinalizeQuality:
             row,
             enabled=judge_config.enabled,
             model=judge_config.model_source or self.config.model.model_source,
+            confirmations=scores.hygiene_confirmations if scores is not None else [],
         )
         raw_aggregate = judge.aggregate
         candidate_answer = _answer(row.get("answer_json"))
