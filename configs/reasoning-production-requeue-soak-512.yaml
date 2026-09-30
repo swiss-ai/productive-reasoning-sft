@@ -1,0 +1,82 @@
+# Exercises automatic watchdog requeue and exact resume on the production path.
+run:
+  run_id: reasoning-production-requeue-soak-512-v1
+  output_dir: ../runs
+  seed: 51
+  resume: true
+
+source:
+  adapter: pool
+  num_samples: 512
+  system_prompt: null
+  params:
+    sources:
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/numina-basic/prompts"
+        weight: 0.55
+        subsets: [gsm8k, orca_math]
+        difficulty_weights: {easy: 1.0}
+      - path: "${SCRATCH}/synthetic-sft-sources/pools/reasoning-gym-basic/prompts"
+        weight: 0.45
+        subsets: [calendar_arithmetic, decimal_arithmetic, fraction_simplification,
+          gsm_symbolic, prime_factorization, time_intervals, path_star, knights_knaves]
+        difficulty_weights: {easy: 1.0}
+
+model:
+  model_source: /capstor/store/cscs/swissai/infra01/hf_models/models/Qwen/Qwen3.6-35B-A3B-FP8
+  execution: continuous
+  inflight_candidates: 32
+  dtype: auto
+  tensor_parallel_size: 1
+  max_model_len: 24576
+  gpu_memory_utilization: 0.90
+  max_num_seqs: 64
+  max_num_batched_tokens: 4096
+  enable_prefix_caching: true
+  batch_size: 128
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    max_tokens: 8192
+    presence_penalty: 1.5
+    reasoning_effort: null
+
+generation:
+  mode: direct_polish
+  rollouts_per_prompt: 1
+  polish: true
+  polish_max_tokens: 4096
+
+quality:
+  verifier_threshold: 1.0
+  judge:
+    enabled: true
+    model_source: null
+    batch_size: 128
+    max_tokens: 1024
+    analysis_samples: 2
+    analysis_max_tokens: 2048
+    hygiene_max_tokens: 768
+    reasoning_effort: null
+    rubric_version: 13
+
+output:
+  parquet_target_mb: 128
+  compression: zstd
+  prepared_shards_per_gpu: 1
+  checkpoint_rows: 32
+  checkpoint_seconds: 30
+
+slurm:
+  nodes: 2
+  gpus_per_node: 4
+  cpus_per_node: 288
+  time: "00:05:00"
+  partition: preemptable
+  account: infra01
+  qos: null
+  exclusive: true
+  requeue: true
+  requeue_before_timeout_seconds: 60
+  environment: ../container/cscs.toml
+  image: "${SCRATCH}/images/synthetic-sft-v0.13.sqsh"
