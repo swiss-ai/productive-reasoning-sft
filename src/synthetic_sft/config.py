@@ -64,7 +64,7 @@ class ModelConfig(StrictModel):
 
 
 class GenerationConfig(StrictModel):
-    mode: Literal["draft_polish", "direct"] = "draft_polish"
+    mode: Literal["draft_polish", "direct", "direct_polish"] = "draft_polish"
     rollouts_per_prompt: int = Field(default=1, gt=0)
     polish: bool = True
     polish_max_tokens: int = Field(default=4096, gt=0)

@@ -143,12 +143,19 @@ class VLLMBatchPredictor:
         if self.judge:
             self._quality(records)
             return pd.DataFrame.from_records(records)
-        direct = self.config.generation.mode == "direct"
-        messages = [self._direct_messages(row) if direct else self._messages(row) for row in records]
-        sampling = [self._sampling(row, phase="direct" if direct else "draft") for row in records]
+        mode = self.config.generation.mode
+        bounded_draft = mode in {"direct", "direct_polish"}
+        messages = [
+            self._direct_messages(row) if bounded_draft else self._messages(row)
+            for row in records
+        ]
+        sampling = [
+            self._sampling(row, phase="direct" if bounded_draft else "draft")
+            for row in records
+        ]
         template_kwargs = (
             {"enable_thinking": False}
-            if direct
+            if bounded_draft
             else self._thinking_kwargs(self.config.model.sampling.reasoning_effort)
         )
         results = self._chat(records, messages, sampling, template_kwargs, phase="generation")
@@ -158,12 +165,12 @@ class VLLMBatchPredictor:
             row["draft_finish_reason"] = candidate.finish_reason
             row["draft_num_input_tokens"] = len(output.prompt_token_ids or [])
             row["draft_num_generated_tokens"] = len(candidate.token_ids or [])
-            if direct:
+            if bounded_draft:
                 row["raw_generation"] = candidate.text
                 row["finish_reason"] = candidate.finish_reason
                 row["num_input_tokens"] = len(output.prompt_token_ids or [])
                 row["num_generated_tokens"] = len(candidate.token_ids or [])
-        if not direct:
+        if mode in {"draft_polish", "direct_polish"}:
             self._polish(records)
         tokenizer = self.llm.get_tokenizer()
         for row in records:
