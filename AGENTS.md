@@ -268,9 +268,11 @@ The checkpoints contain 1,088,297 unique candidates with zero duplicates: 1,047,
 correctness-only eligible and 869,484 are productivity-filtered eligible. The six allocations used
 about 157.6 node-hours and achieved roughly 6,905 candidates/node-hour including repeated startup
 losses. At that realized rate, the remaining 4,911,703 candidates need about 35.6 active wall-clock
-hours on 20 nodes, keeping the projected total near 869 node-hours. The held job requires an
-explicit `scontrol release 3551775` or an intentional replacement submission. Inspect this job and
-its run directory before acting; never create a concurrent duplicate against the same checkpoints.
+hours on 20 nodes, keeping the projected total near 869 node-hours. The held job 3551775 was
+cancelled, without touching its checkpoints, and replaced by Slurm job **3558380** on 2026-10-01.
+The replacement initially entered `PENDING (Priority)` with `Restarts=0`, `Requeue=1`, and the same
+20-node/80-GPU request. Job 3558380 is now authoritative. Never release 3551775 or create a
+concurrent duplicate against the same checkpoints.
 
 Inspect a completed run with:
 
@@ -299,11 +301,12 @@ uv run synthetic-sft submit configs/reasoning-production-calibration-128.yaml
 uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-6m.yaml
 ```
 
-Production was submitted with explicit owner approval as job 3551775. Do not submit another copy;
-resume/requeue this run if intervention is needed. Use a new `run_id` whenever the model, source,
-sampling, or quality policy changes; completed stages have manifests tied to the resolved
-configuration. A resumed run skips durable candidate IDs. In-flight requests can be lost at
-preemption, but completed groups cannot.
+Production was submitted with explicit owner approval. The original job 3551775 was cancelled
+after exhausting its automatic requeue allowance; replacement job 3558380 resumes the same run.
+Do not submit another copy. Use a new `run_id` whenever the model, source, sampling, or quality
+policy changes; completed stages have manifests tied to the resolved configuration. A resumed run
+skips durable candidate IDs. In-flight requests can be lost at preemption, but completed groups
+cannot.
 
 Each run contains `prepared/seeds/`, `intermediate/generated/`, `candidates/`, `sft/`, `logs/`, and
 `manifests/`. The SFT export contains every candidate with clean training columns, provenance,
