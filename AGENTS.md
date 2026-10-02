@@ -274,8 +274,7 @@ The replacement initially entered `PENDING (Priority)` with `Restarts=0`, `Reque
 20-node/80-GPU request. Job 3558380 was subsequently preempted five times on October 1
 (57:54, 3:07:09, 14:17, 1:07:52, 1:35:06) and held again. On October 2, the owner requested
 status/recovery; the held job was cancelled and replaced by **3567665**, using the same config
-and checkpoints. It started on 20 nodes with `Restarts=0`. Job 3567665 is authoritative;
-do not revive either cancelled predecessor or create a concurrent duplicate. This recovery
+and checkpoints. It started on 20 nodes with `Restarts=0`. This recovery
 does not remove the cluster's automatic requeue limit; further preemptions can cause another hold.
 
 The October 2 recovery audit counted 2,034,955 durable rows, all unique (33.9% of the 6M target).
@@ -284,6 +283,15 @@ Scores 0–5: 27,280 / 3,723 / 15,235 / 365,768 / 233 / 1,622,716. These are pip
 not a fresh manual quality audit. The two completed jobs consumed about 298.4 node-hours;
 the remaining work projects to roughly 29.1 active hours on 20 nodes at their combined rate,
 excluding future queue delays and changes in preemption frequency.
+
+Job 3567665 was preempted on October 2 at 17:16 after 40:37. Its restart failed after
+three seconds at 17:18 because Slurm could not execute `/etc/slurm/task_prolog` (missing
+file), before the pipeline started. On October 3, Parquet metadata counted 2,116,917
+durable rows (35.3%); 3,883,083 remain and final exports do not yet exist. With explicit
+owner approval, the same configuration was resubmitted as **3569366** at 00:32 CEST.
+It was accepted as `PENDING (Priority)`, requesting 20 nodes/80 GPUs with `Requeue=1`
+and `Restarts=0`. Job 3569366 is authoritative. Do not revive predecessors or submit
+a concurrent copy against these checkpoints. No generation or filtering policy changed.
 
 Inspect a completed run with:
 
@@ -314,7 +322,8 @@ uv run synthetic-sft submit --dry-run configs/reasoning-easy-production-6m.yaml
 
 Production was submitted with explicit owner approval. The original job 3551775 was cancelled
 after exhausting its automatic requeue allowance; job 3558380 exhausted its allowance too.
-Current replacement job 3567665 resumes the same run.
+Job 3567665 subsequently failed in the cluster task prolog after preemption.
+Current replacement job 3569366 resumes the same run.
 Do not submit another copy. Use a new `run_id` whenever the model, source, sampling, or quality
 policy changes; completed stages have manifests tied to the resolved configuration. A resumed run
 skips durable candidate IDs. In-flight requests can be lost at preemption, but completed groups
